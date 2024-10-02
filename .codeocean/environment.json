@@ -1,0 +1,37 @@
+{
+	"version": 1,
+	"base_image": "codeocean/pytorch:2.1.0-cuda11.8-mambaforge23.1.0-4-python3.10.12-ubuntu22.04",
+	"options": {
+		"registry_host_arg": true,
+		"git_ask_pass": true
+	},
+	"installers": {
+		"pip": {
+			"packages": [
+				{
+					"name": "caveclient"
+				},
+				{
+					"name": "cloudvolume"
+				},
+				{
+					"name": "matplotlib"
+				},
+				{
+					"name": "numpy"
+				},
+				{
+					"name": "pytorch"
+				},
+				{
+					"name": "torchvision"
+				},
+				{
+					"name": "tqdm"
+				}
+			],
+			"options": {},
+			"pre_install_options": {}
+		}
+	}
+}
