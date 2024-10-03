@@ -1,33 +1,51 @@
 {
 	"version": 1,
-	"base_image": "codeocean/pytorch:2.1.0-cuda11.8-mambaforge23.1.0-4-python3.10.12-ubuntu22.04",
+	"base_image": "codeocean/cuda-miniconda-jupyterlab:latest",
 	"options": {
 		"registry_host_arg": true,
 		"git_ask_pass": true
 	},
 	"installers": {
+		"conda": {
+			"packages": [
+				{
+					"name": "python",
+					"version": "3.10.9"
+				}
+			]
+		},
 		"pip": {
 			"packages": [
 				{
-					"name": "caveclient"
+					"name": "caveclient",
+					"version": "5.30.1"
 				},
 				{
-					"name": "cloudvolume"
+					"name": "cloud-volume",
+					"version": "10.5.0"
 				},
 				{
-					"name": "matplotlib"
+					"name": "matplotlib",
+					"version": "3.9.2"
 				},
 				{
-					"name": "numpy"
+					"name": "numpy",
+					"version": "1.26.4"
 				},
 				{
-					"name": "pytorch"
+					"name": "pandas",
+					"version": "2.2.3"
 				},
 				{
-					"name": "torchvision"
+					"name": "pathlib",
+					"version": "1.0.1"
 				},
 				{
-					"name": "tqdm"
+					"name": "tensorboard"
+				},
+				{
+					"name": "torch",
+					"version": "2.4.1"
 				}
 			],
 			"options": {},

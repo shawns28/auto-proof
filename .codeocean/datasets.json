@@ -1,0 +1,9 @@
+{
+	"version": 1,
+	"attached_datasets": [
+		{
+			"id": "8cb83f3c-7f9e-4bc6-9cbd-526fad171e6e",
+			"mount": "minnie_splitlog_240927"
+		}
+	]
+}
