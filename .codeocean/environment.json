@@ -25,6 +25,14 @@
 					"version": "10.5.0"
 				},
 				{
+					"name": "ipywidgets",
+					"version": "8.1.5"
+				},
+				{
+					"name": "jupyter",
+					"version": "1.1.1"
+				},
+				{
 					"name": "matplotlib",
 					"version": "3.9.2"
 				},
@@ -41,11 +49,16 @@
 					"version": "1.0.1"
 				},
 				{
-					"name": "tensorboard"
+					"name": "tensorboard",
+					"version": "2.18.0"
 				},
 				{
 					"name": "torch",
 					"version": "2.4.1"
+				},
+				{
+					"name": "tqdm",
+					"version": "4.66.5"
 				}
 			],
 			"options": {},

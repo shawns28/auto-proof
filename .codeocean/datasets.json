@@ -2,6 +2,14 @@
 	"version": 1,
 	"attached_datasets": [
 		{
+			"id": "7a230fbb-30e5-40eb-817c-83b10be7f6f9",
+			"mount": "pruned_minnie_splitlog_943"
+		},
+		{
+			"id": "87282a67-9062-4578-9e31-21ed92f11064",
+			"mount": "minnie_dicts_943"
+		},
+		{
 			"id": "8cb83f3c-7f9e-4bc6-9cbd-526fad171e6e",
 			"mount": "minnie_splitlog_240927"
 		}
