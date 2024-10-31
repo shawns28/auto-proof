@@ -118,13 +118,6 @@ def save_operation_to_pre_edit_roots(client, op_to_svs, op_to_pre_edit_dates, nu
     op_to_pre_edit_roots_classic_dict = dict(op_to_pre_edit_roots)
     save_pickle_dict(save_path, op_to_pre_edit_roots_classic_dict)
 
-'''
-Private method
-'''
-def __process_operation__(data):
-    op_id, date, supervoxel, client = data
-    root_id = client.chunkedgraph.get_root_id(supervoxel, date)
-    return op_id, root_id 
 
 '''
 Creates a map from root ids to rep coords and saves it
@@ -138,6 +131,14 @@ def save_root_id_to_rep_coords(op_to_rep_coords, op_to_pre_edit_roots, save_path
     for op in op_to_rep_coords:
         root_id_to_rep_coords_dict[op_to_pre_edit_roots[op]] = op_to_rep_coords[op]
     save_pickle_dict(save_path, root_id_to_rep_coords_dict)
+'''
+Private method
+'''
+def __process_operation__(data):
+    op_id, date, supervoxel, client = data
+    root_id = client.chunkedgraph.get_root_id(supervoxel, date)
+    return op_id, root_id 
+
 
 '''
 Saves dictionary as pickle file at filepath

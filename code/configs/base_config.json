@@ -1,0 +1,13 @@
+{
+    "data": {
+        "data_path": "../../data",
+        "cutoff": 1000,
+        "num_rand_seeds": 2,
+        "datastack_name": "minnie65_phase3_v1",
+        "my_token": "64df9664ce8a28852ee99167c26a9e8d",
+        "mat_version": 943,
+        "num_workers": 64,
+        "prefetch_factor": 2,
+        "batch_size": 1
+    }
+}
