@@ -39,7 +39,7 @@ def __save_root943__(root_path):
                     with open(f'../../data/error_root_943/{root}', 'w') as f:
                         return
         root_943_arr = np.array([root_943_dict[input_vertices[i]] for i in range(len(vertices))])
-        # f.create_dataset('root_943', data=root_943_arr)
+        f.create_dataset('root_943', data=root_943_arr)
         with open(f'../../data/successful_root_943/{root}', 'w') as f:
             pass
     
