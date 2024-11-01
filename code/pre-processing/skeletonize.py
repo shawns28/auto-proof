@@ -7,7 +7,6 @@ from tqdm import tqdm
 import graph_tool.all as gt
 import h5py
 import json
-import fastremap
 import sys
 import time
 
