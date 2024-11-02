@@ -1,5 +1,5 @@
 import data_utils
-from caveclient import CAVEclient
+# from caveclient import CAVEclient
 import os
 import pandas as pd
 import numpy as np
@@ -36,7 +36,7 @@ def parallel():
         for _ in pool.imap_unordered(__feature__, root_paths):
             pbar.update()
 
-def main():
+def main(args):
     # start_time = time.time()
     # data_directory = '../../data'
     # features_directory = f'{data_directory}/features'
@@ -155,6 +155,15 @@ def test_set_time(root_943s):
     print("set time", set_end_time - set_time)
     print("isin time", isin_end_time - set_end_time)
 
+def get_post_future_labels():
+    files = glob.glob('../../data/successful_labels/*')
+    print(files[0])
+    file = files[0][-18:]
+    print(file)
+    roots = [files[i][-18:] for i in range(len(files))]
+    data_utils.save_txt('../../data/post_label_roots_459974.txt', roots)
+
 if __name__ == "__main__":
-    main()
+    # main(sys.argv[1:])
     # parallel()
+    get_post_future_labels()

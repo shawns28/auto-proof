@@ -9,6 +9,41 @@ import os
 from torch.multiprocessing import Manager
 from cloudvolume import CloudVolume
 
+class AutoProofDataset(Dataset):
+    def __init__(self, config):
+        self.config = config
+        files = glob.glob('../../data/successful_labels/*')
+        files = [files[0]] # 864691135778235581
+        self.roots = [files[i][-18:] for i in range(len(files))]
+        self.seed_index = config['loader']['seed_index']
+
+    def __len__(self):
+        return len(self.roots)
+
+    def __getitem__(self, index):
+        root = self.roots[index]
+        root_path = f'../../data/features/{root}_1000.h5py'
+        with h5py.File(root_path, 'r') as f:
+            vertices = torch.from_numpy(f['vertices'][:])
+            compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
+            radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
+            labels = torch.from_numpy(f['label'][:]).unsqueeze(1)
+            confidence = torch.from_numpy(f['confidence'][:]).unsqueeze(1)
+            pos_enc = torch.from_numpy(f['pos_enc'][:])
+
+            # Not adding rank as a feature
+            rank_num = f'rank_{self.seed_index}'
+            rank = f[rank_num][:]
+
+            # Edges information is used in adjency matrix and pos_enc
+            edges = torch.from_numpy(f['edges'][:])
+
+            input = torch.cat((vertices, compartment, radius, labels, confidence, pos_enc), dim=1)
+
+            print(vertices.shape, edges.shape, compartment.shape, radius.shape, labels.shape, confidence.shape, pos_enc.shape, rank.shape)
+            print("input shape", input.shape)
+        return [1]
+
 class ProofDataset(Dataset):
     def __init__(self, config, inference=False):
 
@@ -212,13 +247,13 @@ class ProofConvertedDataset(Dataset):
         return root, vertices, edges, rank_0, rank_1, rank_2, num_vertices, num_initial_vertices, compartment, radius
 
 def build_dataloader(dataset):
-    # num_workers = config['data']['num_workers']
+    # num_workers = config['loader']['num_workers']
     num_workers = 2
 
-    # batch_size = config['data']['batch_size']
+    # batch_size = config['loader']['batch_size']
     batch_size = 1
 
-    # prefetch_factor = config['data']['prefetch_factor']
+    # prefetch_factor = config['loader']['prefetch_factor']
     # prefetch_factor = 1
     # loader = DataLoader(
     #         ProofDataset(config),

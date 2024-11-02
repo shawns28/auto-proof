@@ -209,6 +209,8 @@ def test_h5_add():
     num_vertices = rf[root][()]
     print(num_vertices[0][0].dtype)
 
+# This is all the ones after features
+# This doesn't include after future roots
 def get_roots_467853():
     files = glob.glob(f'{features_directory}/*')
     print(files[0])
