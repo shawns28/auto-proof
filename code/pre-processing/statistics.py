@@ -16,8 +16,8 @@ config, _, _, _, data_directory = data_utils.initialize()
 # features_directory = f'{data_directory}/features_test'
 features_directory = f'{data_directory}/features'
 figures_path = f'{data_directory}/figures'
-root_num_vertices_path = f'{figures_path}/root_to_num_vertices.pkl'
-root_num_init_vertices_path = f'{figures_path}/root_to_num_init_vertices.pkl'
+root_num_vertices_path = f'{data_directory}/root_to_num_vertices_467853.pkl'
+root_num_init_vertices_path = f'{data_directory}/root_to_num_init_vertices_467853.pkl'
 
 def save_dicts():
     root_ids = data_utils.get_roots()
@@ -72,11 +72,16 @@ def main():
     plot_data(data, f'Distribution of Vertice Counts Post Cutoff {config['data']['cutoff']}', figures_path)
 
 def plot_data(data, title, path):
-    plt.hist(data, bins=10, edgecolor='black')
+    # bins = [0, 25, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 100000]
+    # Logarithmic bins
+    bins = np.logspace(np.log10(min(data)), np.log10(max(data)), 10)
+    # quantiles = np.quantile(data, np.linspace(0, 1, 10))
+    plt.hist(data, bins=bins, edgecolor='black')
+    plt.xscale('log')
     plt.xlabel('Vertices')
     plt.ylabel('Frequency')
     plt.title(title)
-    plt.savefig(f'{path}/{title}_467853')
+    plt.savefig(f'{path}/{title}_467853_log')
     plt.close()
 
 def get_directory_size():
@@ -107,5 +112,5 @@ def get_unskel():
 if __name__ == "__main__":
     # get_unskel()
     # get_directory_size()
-    save_dicts_2()
+    # save_dicts_2()
     main()
