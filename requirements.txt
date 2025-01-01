@@ -1,7 +1,6 @@
 matplotlib
 numpy
 pandas
-tensorboard
 torch
 tqdm
 h5py

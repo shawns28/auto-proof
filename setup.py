@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 with open("requirements.txt", "r") as f:
     required = f.read().splitlines()
 
-setup(name='auto-proof', 
+setup(name='auto_proof', 
         version='1.0',
         description="Automated Proofreading for Connectomics",
         author="Shawn Stanley",
