@@ -49,7 +49,7 @@ class AutoProofDataset(Dataset):
                 size = len(vertices)
 
                 # Currently concatenating the pos enc to node features
-                # Should remove the ones if not going to predict the padded ones
+                # Should remove the ones if not going to predict the padded ones, even if we don't predict we still use it
                 input = torch.cat((vertices, compartment, radius, pos_enc, torch.ones(size, 1)), dim=1)
 
                 edges = f['edges'][:]

@@ -1,4 +1,5 @@
-import data_utils
+from auto_proof.code.pre import data_utils
+
 # from caveclient import CAVEclient
 import os
 import pandas as pd
