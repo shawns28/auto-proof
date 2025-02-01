@@ -10,6 +10,8 @@ from datetime import timedelta
 import json
 import h5py
 
+CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
+
 '''
 Prunes the original df to only contain operation ids that lie before and at materialization timestamp.
 Inputs:
@@ -215,13 +217,13 @@ Returns:
     data directory: data directory path
 '''
 def initialize():
-    with open('../configs/base_config.json', 'r') as f:
+    with open(CONFIG_PATH, 'r') as f:
         config = json.load(f)
     datastack_name = config["data"]["datastack_name"]
     my_token = config["data"]["my_token"]
     mat_version = config["data"]["mat_version"]
     client = CAVEclient(datastack_name=datastack_name, auth_token=my_token, version=mat_version)
-    data_directory = config["data"]["data_path"]
+    data_directory = config["data"]["data_dir"]
     return config, datastack_name, mat_version, client, data_directory
 
 '''

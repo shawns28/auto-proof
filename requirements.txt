@@ -5,3 +5,8 @@ torch
 tqdm
 h5py
 caveclient
+neptune
+pyvista[jupyter]
+trame
+trame-vtk
+cloud-volume

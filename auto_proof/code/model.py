@@ -111,7 +111,7 @@ class GraphTransformer(nn.Module):
                  depth: int = 5,
                  num_heads: int = 8,
                  mlp_ratio: int = 2,
-                 feat_dim: int = 38,
+                 feat_dim: int = 36,
                  num_classes: int = 1,
                  proj_dim: int = 128,
                  use_exp: bool = True) -> nn.Module:

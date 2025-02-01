@@ -6,14 +6,17 @@
         "n_head": 4
     },
     "data": {
-        "data_path": "something",
-        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/sharded_roots_459964.txt",
+        "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/",
+        "features_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
+        "features_sharded_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features_10000_gzip_4/",
+        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_label_roots_459972.txt",
         "cutoff": 1000,
         "num_rand_seeds": 2,
         "datastack_name": "minnie65_phase3_v1",
         "my_token": "64df9664ce8a28852ee99167c26a9e8d",
         "mat_version": 943,
-        "num_shards": 64
+        "num_shards": 10000,
+        "shard_features": false
     },
     "loader": {
         "num_workers": 32,
@@ -24,11 +27,13 @@
         "feat_dim": 38
     },
     "trainer": {
-        "ckpt_dir": "data/ckpt",
-        "save_ckpt_every": 1
+        "ckpt_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt",
+        "save_ckpt_every": 1,
+        "visualize_num": 5
     },
     "optimizer": {
-        "epochs": 2,
+        "epochs": 1,
+        "max_iterations": 2000,
         "lr": 0.001,
         "exp_decay": 0.1
     }

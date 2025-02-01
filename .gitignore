@@ -10,3 +10,6 @@
 code/pre-processing/__pycache__/data_utils.cpython-310.pyc
 code/pre-processing/__pycache__/prune_edits.cpython-310.pyc
 code/pre-processing/__pycache__/utils.cpython-310.pyc
+core.*
+build/
+.neptune/

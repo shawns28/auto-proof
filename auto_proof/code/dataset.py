@@ -10,27 +10,43 @@ import h5py
 import os
 from torch.multiprocessing import Manager
 import time
+import neptune
 
 class AutoProofDataset(Dataset):
     def __init__(self, config):
         self.config = config
-        self.roots = config['data']['root_path']
+        self.roots = data_utils.load_txt(config['data']['root_path'])
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.num_shards = config['data']['num_shards']
-        # print(self.roots[-50:])
+        self.shard_features = config['data']['shard_features']
+        self.features_path = config['data']['features_path']
+        self.features_sharded_path = config['data']['features_sharded_path']
 
     def __len__(self):
         return len(self.roots)
 
+    def get_root_index(self, root):
+        index = np.where(self.roots == root)[0][0]
+        return index
+    
+    def get_random_root(self):
+        random_index = np.random.randint(0, len(self.roots))
+        return self.roots[random_index]
+
     def __getitem__(self, index):
         root = self.roots[index]
-        shard_id = hash_shard(root, self.num_shards)
-        shard_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features/{shard_id}.txt'
+        data_path = f'{self.features_path}{root}.hdf5'
+        if self.shard_features:
+            shard_id = hash_shard(root, self.num_shards)
+            data_path = f'{self.features_sharded_path}{shard_id}.hdf5'
         try:
-            with h5py.File(shard_path, 'r') as shard_file:
-                f = shard_file[str(root)]
+            with h5py.File(data_path, 'r') as shard_file:
+                f = shard_file
+                if self.shard_features:
+                    f = shard_file[str(root)]
                 vertices = torch.from_numpy(f['vertices'][:])
+                # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
                 radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
                 pos_enc = torch.from_numpy(f['pos_enc'][:])
@@ -39,6 +55,10 @@ class AutoProofDataset(Dataset):
 
                 labels = labels.unsqueeze(1).int()
                 confidence = confidence.unsqueeze(1).int()
+
+                # If doing the default features, need to set confidence to 1 where labels are 0
+                # if not self.shard_features:
+                #     confidence[labels == 0] = 1
 
                 # Not adding rank as a feature
                 rank_num = f'rank_{self.seed_index}'
@@ -50,6 +70,8 @@ class AutoProofDataset(Dataset):
                 # Should remove the ones if not going to predict the padded ones
                 # SHOULD REMOVE THE ONES NOW SINCE I USE -1 later to indicate that the label is padded anyway
                 input = torch.cat((vertices, compartment, radius, pos_enc, torch.ones(size, 1)), dim=1)
+                # No longer use compartment or the ones
+                # input = torch.cat((vertices, radius, pos_enc), dim=1)
 
                 edges = f['edges'][:]
 
@@ -69,7 +91,7 @@ class AutoProofDataset(Dataset):
             print("root: ", root, "error: ", e)
             return None
             
-        return input, labels, confidence, adj
+        return input, labels, confidence, adj, root
 
 def hash_shard(root, num_shards):
     hash_value = hash(root)
@@ -90,13 +112,21 @@ def edge_list_to_adjency_numpy(edges, size):
 
 # 0.003 sec
 def edge_list_to_adjency(edges, size):
-    adj = np.zeros((size, size))
+    adj = torch.zeros((size, size))
     for edge in edges:
         adj[edge[0]][edge[1]] = 1
         adj[edge[1]][edge[0]] = 1
         adj[edge[0]][edge[0]] = 1
         adj[edge[1]][edge[1]] = 1
     return adj
+
+def adjency_to_edge_list(adj):
+    edge_list = []
+    for i in range(adj.shape[0]):
+        for j in range(adj.shape[1]):
+            if j >= i and adj[i][j] != 0:
+                edge_list.append((i, j))
+    return edge_list
 
 # adapted from skeletonize.py
 def prune_edges(edges, indices):
@@ -110,9 +140,10 @@ def prune_edges(edges, indices):
             edge_mask[i] = True
     return edges[edge_mask]
 
-
-def build_dataloader(dataset, config):
-    num_workers = max(config['loader']['num_workers'], os.cpu_count() // 2)
+def build_dataloader(dataset, config, run):
+    # num_workers = max(config['loader']['num_workers'], os.cpu_count() // 2)
+    num_workers = config['loader']['num_workers']
+    run["parameters/loader/num_workers"] = num_workers
     print("num workers", num_workers)
 
     batch_size = config['loader']['batch_size']
@@ -150,4 +181,4 @@ def build_dataloader(dataset, config):
             pin_memory=True,
             persistent_workers=True)
 
-    return train_loader, val_loader, train_size, val_size
+    return train_loader, val_loader, train_dataset, val_dataset

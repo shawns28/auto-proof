@@ -21,3 +21,7 @@ Final version:
 gt env: First create an env by conda create --name gt -c conda-forge graph-tool
 Then run the pip install . --upgrade which should take the default requirements file
 Cloud volume env: Create base conda env and then run pip install -r cv_requirements.txt which should have the first requirements file already pulled
+
+Need to run conda install -c conda-forge trame in order to save html file from pyvista
+
+Everything works now I just needed to run conda install pip first so that pip works in the conda env instaed of outside
