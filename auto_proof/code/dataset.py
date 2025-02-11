@@ -13,15 +13,16 @@ import time
 import neptune
 
 class AutoProofDataset(Dataset):
-    def __init__(self, config):
+    def __init__(self, config, mode):
         self.config = config
-        self.roots = data_utils.load_txt(config['data']['root_path'])
+        # 'root' is all, 'train', 'val', 'test'
+        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])[:6000] # NOTE: Currently only using 1000
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.num_shards = config['data']['num_shards']
-        self.shard_features = config['data']['shard_features']
-        self.features_path = config['data']['features_path']
-        self.features_sharded_path = config['data']['features_sharded_path']
+        self.features_dir = config['data']['features_dir']
+        # self.shard_features = config['data']['shard_features']
+        # self.features_sharded_dir = config['data']['features_sharded_dir']
 
     def __len__(self):
         return len(self.roots)
@@ -33,26 +34,38 @@ class AutoProofDataset(Dataset):
     def get_random_root(self):
         random_index = np.random.randint(0, len(self.roots))
         return self.roots[random_index]
+    
+    def get_is_proofread(self, root):
+        data_path = f'{self.features_dir}{root}.hdf5'
+        with h5py.File(data_path, 'r') as f:
+            return f['is_proofread'][()]
+
+    def get_num_initial_vertices(self, root):
+        data_path = f'{self.features_dir}{root}.hdf5'
+        with h5py.File(data_path, 'r') as f:
+            return f['num_initial_vertices'][()]
 
     def __getitem__(self, index):
         root = self.roots[index]
-        data_path = f'{self.features_path}{root}.hdf5'
-        if self.shard_features:
-            shard_id = hash_shard(root, self.num_shards)
-            data_path = f'{self.features_sharded_path}{shard_id}.hdf5'
+        data_path = f'{self.features_dir}{root}.hdf5'
+        # NOTE: Sharded features don't have proofread roots in them
+        # if self.shard_features: 
+        #     shard_id = hash_shard(root, self.num_shards)
+        #     data_path = f'{self.features_sharded_dir}{shard_id}.hdf5'
         try:
             with h5py.File(data_path, 'r') as shard_file:
                 f = shard_file
-                if self.shard_features:
-                    f = shard_file[str(root)]
+                # if self.shard_features:
+                #     f = shard_file[str(root)]
                 vertices = torch.from_numpy(f['vertices'][:])
                 # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
                 radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
                 pos_enc = torch.from_numpy(f['pos_enc'][:])
                 labels = torch.from_numpy(f['label'][:])
+                # print("original labels", labels)
                 confidence = torch.from_numpy(f['confidence'][:])
-
+                # print("num_initial_vertices", f['num_initial_vertices'][()])
                 labels = labels.unsqueeze(1).int()
                 confidence = confidence.unsqueeze(1).int()
 
@@ -93,11 +106,11 @@ class AutoProofDataset(Dataset):
             
         return input, labels, confidence, adj, root
 
-def hash_shard(root, num_shards):
-    hash_value = hash(root)
-    hash_value = abs(hash_value)
-    shard_id = hash_value % num_shards
-    return shard_id
+# def hash_shard(root, num_shards):
+#     hash_value = hash(root)
+#     hash_value = abs(hash_value)
+#     shard_id = hash_value % num_shards
+#     return shard_id
 
 # 0.002 sec but double count diagonal
 def edge_list_to_adjency_numpy(edges, size):
@@ -140,45 +153,26 @@ def prune_edges(edges, indices):
             edge_mask[i] = True
     return edges[edge_mask]
 
-def build_dataloader(dataset, config, run):
-    # num_workers = max(config['loader']['num_workers'], os.cpu_count() // 2)
+def build_dataloader(config, dataset, run, mode):
     num_workers = config['loader']['num_workers']
-    run["parameters/loader/num_workers"] = num_workers
-    print("num workers", num_workers)
-
     batch_size = config['loader']['batch_size']
-    print("batch size" , batch_size)
+    shuffle = False
 
-    # prefetch_factor = config['loader']['prefetch_factor']
-    # prefetch_factor = 1
-    # loader = DataLoader(
-    #         ProofDataset(config),
-    #         batch_size=batch_size, 
-    #         shuffle=False,
-    #         num_workers=num_workers,
-    #         pin_memory=True,
-    #         persistent_workers=True,
-    #         prefetch_factor=prefetch_factor)
+    if mode == 'root' or mode == 'train':
+        run["parameters/loader/num_workers"] = num_workers
+        print("num workers", num_workers)
+        print("batch size" , batch_size)
+        shuffle = True
+
+    prefetch_factor = config['loader']['prefetch_factor']
+    if prefetch_factor == 0:
+        prefetch_factor = None
     
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size]) 
-
-    train_loader = DataLoader(
-            dataset=train_dataset,
+    return DataLoader(
+            dataset=dataset,
             batch_size=batch_size, 
-            shuffle=True,
+            shuffle=shuffle,
             num_workers=num_workers,
             pin_memory=True,
-            persistent_workers=True)
-
-    val_loader = DataLoader(
-            dataset=val_dataset,
-            batch_size=batch_size, 
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=True,
-            persistent_workers=True)
-
-    return train_loader, val_loader, train_dataset, val_dataset
+            persistent_workers=True,
+            prefetch_factor=prefetch_factor)

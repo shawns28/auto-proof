@@ -14,158 +14,107 @@ import multiprocessing
 import time
 import matplotlib.pyplot as plt
 import graph_tool.all as gt
+import argparse
+import shutil
 
-def __feature__(root_path):
-    with h5py.File(root_path, 'r') as f:
-        root_943s = f['root_943'][:]
-        edges = f['edges'][:]
-    g = gt.Graph(edges, directed=False)
+'''
+Creates labels, confidences and positional encodings
+'''
+def create_labels(config, success_labels_dir):
+    # TODO: Make this compatible with running the script in pre_process_main.py
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--chunk_num", help="chunk num")
+    args = parser.parse_args()
+    chunk_num = 1
+    num_chunks = config['data']['num_chunks']
+    if args.chunk_num:
+        chunk_num = int(args.chunk_num)
+    else: # No chunking
+        num_chunks = 1
 
-    labels = get_labels(g, root_943s)
+    root_ids = data_utils.load_txt(config['data']['root_path'])
+    root_ids = data_utils.get_roots_chunk(config, root_ids, chunk_num=chunk_num, num_chunks=num_chunks)
 
-    confidences = get_confidences(root_943s)
+    if not os.path.isdir(success_labels_dir):
+        os.makedirs(success_labels_dir)
 
-    pos_enc = get_positional_encodings(g)
-
-def parallel():
-    roots = glob.glob('../../data/successful_root_943/*')
-    root_paths = [f'../../data/features/{root[-18:]}_1000.h5py' for root in roots]
-
-    num_processes = 1
-
-    with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(root_paths)) as pbar:
-        for _ in pool.imap_unordered(__feature__, root_paths):
-            pbar.update()
-
-def main(args):
-    # start_time = time.time()
-    # data_directory = '../../data'
-    # features_directory = f'{data_directory}/features'
-    # root_paths = glob.glob(f'{features_directory}/*')
-    # roots = glob.glob(f'{data_directory}/successful_root_943/*')
-    # 864691135778235581 - 921 size
-    # root_path = "../../data/features/864691135778235581_1000.h5py"
-    # 864691135815797071 - 1000 size
-    # root_path = "../../data/features/864691135815797071_1000.h5py"
-    # 864691135937424949 - 7 size
-    # root_path = "../../data/features/864691135937424949_1000.h5py"
-    roots = glob.glob('../../data/successful_root_943/*')
-    root_paths = [f'../../data/features/{root[-18:]}_1000.h5py' for root in roots]
-    # root_paths = ['../../data/864691135815797071_1000.h5py']
-
-    chunk_num = int(args[0])
-    num_chunks = 24
-    print("chunk number is:", chunk_num)
-    print("num_chunks is:", num_chunks)
-    chunk_size = len(root_paths) // num_chunks
-    start_index = (chunk_num - 1) * chunk_size
-    end_index = start_index + chunk_size + 1
-    if chunk_num == num_chunks:
-        root_paths = root_paths[start_index:]
-    else:
-        root_paths = root_paths[start_index:end_index]
-
-    with tqdm(total=len(root_paths)) as pbar:
-        for root_path in root_paths:
+    with tqdm(total=len(roots)) as pbar:
+        for root in roots:            
+            success_path = f'{success_labels_dir}{root}'
+            # Skip already processed roots
+            if os.path.exists(success_path):
+                pbar.update()
+                continue
+            
+            root_path = f'{config['data']['features_dir']}{root}.hdf5'
             with h5py.File(root_path, 'r+') as f:
                 root_943s = f['root_943'][:]
                 edges = f['edges'][:]
-                # print("root len", len(root_943s))
+    
                 g = gt.Graph(edges, directed=False)
-                # start_labels = time.time()
+
                 labels = get_labels(g, root_943s)
                 f.create_dataset('label', data=labels)
-                # end_labels = time.time()
-                # print("labels time", end_labels - start_labels)
 
-                # test_set_time(root_943s)
-                # start_confidences = time.time()
-                # NEXT TIME I NEED TO SET CONFIDENCES TO 1 WHERE LABEL is 0
-                confidences = get_confidences(root_943s)
+                confidences = get_confidences(config, root_943s, labels)
                 f.create_dataset('confidence', data=confidences)
-                # print("confidence mismatch", np.where(confidences != True)[0])
-                # end_confidences = time.time()
-                # print("confdicences time", end_confidences - start_confidences)
 
-                # start_posenc = time.time()
-                pos_enc = get_positional_encodings(g)
+                pos_enc = get_positional_encodings(config, g)
                 f.create_dataset('pos_enc', data=pos_enc)
-                # end_posenc = time.time()
-                # print("pos enc time", end_posenc - start_posenc)
 
-                # print("total time", end_posenc - start_time)
-                with open(f'../../data/successful_labels/{root_path[-28:-10]}', 'w') as f:
+                with open(f'{success_labels_dir}{root}', 'w') as f:
                     pass
                 pbar.update()
-    
-            # with h5py.File(root_path, 'r') as f:
-            #     labels = f['label'][:]
-            #     c = f['confidence'][:]
-            #     pos_enc = f['pos_enc'][:]
-            #     print("labels", labels)
-            #     print("conf", c)
-            #     print("pos enc", pos_enc)
 
 def get_labels(g, root_943s):
     labels = np.full(len(root_943s), True)
     for v in g.iter_vertices():
         root_943 = root_943s[v]
-        # print(v)
         for e in g.iter_out_edges(v):
-            # print(root_943s[e[0]], root_943s[e[1]])
             if root_943s[e[1]] != root_943:
                 labels[v] = False
                 break
-    # print("labels mismatch", np.where(labels != True)[0])
-    # print("943 mismatch", np.where(root_943s != 864691135279409057)[0])
     return labels
 
-def get_confidences(root_943s):
-    proofread_roots = data_utils.load_txt('../../data/proofread_943.txt')
-    return np.isin(root_943s, proofread_roots)
+def get_confidences(config, root_943s, labels):
+    proofread_roots_at_mat = data_utils.load_txt(config['data']['proofread_at_mat_path'])
+    conf = np.isin(root_943s, proofread_roots_at_mat)
+    # Confidence at errors should be 1
+    conf[labels == False] = True
+    return conf
 
-def get_positional_encodings(g, pos_enc_dim=32):
+def get_positional_encodings(config, g):
     '''
     Adapted from https://github.com/marissaweis/ssl_neuron/blob/main/ssl_neuron/utils.py
     which was adapted from 
     https://github.com/graphdeeplearning/benchmarking-gnns/blob/ef8bd8c7d2c87948bc1bdd44099a52036e715cd0/data/molecules.py#L147-L168.
     '''
+    pos_enc_dim = config['data']['pos_enc_dim']
     norm_lapl = gt.laplacian(g, norm=True).toarray()
-    # print(norm_lapl)
     eig_val, eig_vec = np.linalg.eigh(norm_lapl)
-    # print("eig val", eig_val)
-    # print("eig_vec", eig_vec)
-    # print("eig_vec shape", eig_vec.shape)
     eig_vec = np.flip(eig_vec, axis=[1])
     pos_enc = eig_vec[:, 1:pos_enc_dim + 1]
 
     if pos_enc.shape[1] < pos_enc_dim:
         pos_enc = np.concatenate([pos_enc, np.zeros((pos_enc.shape[0], pos_enc_dim - pos_enc.shape[1]))], axis=1)
-    # print("pos enc", pos_enc)
-    # print("pos enc shape", pos_enc.shape)
     return pos_enc
 
-def test_set_time(root_943s):
-    proofread_roots = data_utils.load_txt('../../data/proofread_943.txt')
-    proofread_set = set(proofread_roots)
-    set_time = time.time()
-    res = [root in proofread_set for root in root_943s]
-    set_end_time = time.time()
-    res = np.isin(root_943s, proofread_roots)
-    isin_end_time = time.time()
-
-    print("set time", set_end_time - set_time)
-    print("isin time", isin_end_time - set_end_time)
-
-def get_post_future_labels():
-    files = glob.glob('../../data/successful_labels/*')
+def save_post_roots(success_dir, post_path):
+    files = glob.glob(f'{success_dir}*')
     print(files[0])
     file = files[0][-18:]
     print(file)
     roots = [files[i][-18:] for i in range(len(files))]
-    data_utils.save_txt('../../data/post_label_roots_459974.txt', roots)
+    data_utils.save_txt(post_path, roots)
+    # shutil.rmtree(success_dir)
 
 if __name__ == "__main__":
-    # main(sys.argv[1:])
-    # parallel()
-    get_post_future_labels()
+    config = data_utils.get_config()
+    config['data']['is_proofread'] = True
+    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/proofread_features/"
+    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_skel_proofread_roots.txt"
+    success_labels_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/success_labels_proofread/"
+    create_labels(config, success_labels_dir)
+
+    post_labels_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_labels_proofread_roots.txt"
+    save_post_roots(success_labels_dir, post_labels_path)

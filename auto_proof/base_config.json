@@ -7,33 +7,41 @@
     },
     "data": {
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/",
-        "features_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
-        "features_sharded_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features_10000_gzip_4/",
-        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_label_roots_459972.txt",
+        "features_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
+        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023.txt",
+        "train_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/train_roots_369502_913.txt",
+        "val_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/val_roots_45333_69.txt",
+        "test_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/test_roots_46188_69.txt",
+        "proofread_at_mat_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt",
+        "features_sharded_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features_10000_gzip_4/",
         "cutoff": 1000,
         "num_rand_seeds": 2,
         "datastack_name": "minnie65_phase3_v1",
         "my_token": "64df9664ce8a28852ee99167c26a9e8d",
         "mat_version": 943,
+        "num_chunks": 24,
         "num_shards": 10000,
-        "shard_features": false
+        "shard_features": false,
+        "is_proofread": false,
+        "pos_enc_dim": 32
     },
     "loader": {
         "num_workers": 32,
-        "prefetch_factor": 2,
+        "prefetch_factor": 0,
         "batch_size": 32,
-        "seed_index": 1,
+        "seed_index": 2,
         "fov": 500,
         "feat_dim": 38
     },
     "trainer": {
-        "ckpt_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt",
+        "ckpt_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/",
         "save_ckpt_every": 1,
-        "visualize_num": 5
+        "visualize_rand_num": 1,
+        "visualize_cutoff": 4000,
+        "class_weights": 9
     },
     "optimizer": {
-        "epochs": 1,
-        "max_iterations": 2000,
+        "epochs": 10,
         "lr": 0.001,
         "exp_decay": 0.1
     }

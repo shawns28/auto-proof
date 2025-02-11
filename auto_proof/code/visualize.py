@@ -11,42 +11,48 @@ from cloudvolume import CloudVolume
 
 CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
 
-def get_root_output(model, device, data, idx):
-    # For now it's just pulling a specific sample, later this will pull a specific sample in train/val/test
-    sample = data.__getitem__(idx)
-    input, labels, confidence, adj, root = sample 
-    input = input.float().to(device).unsqueeze(0) # (1, fov, d)
-    labels = labels.float().to(device) # (fov, 1)
-    confidence = confidence.float().to(device) # (fov, 1)
-    adj = adj.float().to(device).unsqueeze(0) # (1, fov, fov)
+def get_root_output(model, device, data, root):
+    model.eval() # Marking this here due to async
+    with torch.no_grad(): # Marking this here due to async
+        # For now it's just pulling a specific sample, later this will pull a specific sample in train/val/test
+        idx = data.get_root_index(root)
+        sample = data.__getitem__(idx)
+        input, labels, confidence, adj, root = sample 
+        input = input.float().to(device).unsqueeze(0) # (1, fov, d)
+        labels = labels.float().to(device) # (fov, 1)
+        confidence = confidence.float().to(device) # (fov, 1)
+        adj = adj.float().to(device).unsqueeze(0) # (1, fov, fov)
 
-    output = model(input, adj) # (1, fov, 2)
-    # Still need sigmoid here since we're not doing cross entropy loss since we're not taking the loss
-    sigmoid = nn.Sigmoid()
-    output = sigmoid(output) # (1, fov, 2)
-    output = output.squeeze(0) # (fov, 2)
+        output = model(input, adj) # (1, fov, 2)
+        # Still need sigmoid here since we're not doing cross entropy loss since we're not taking the loss
+        sigmoid = nn.Sigmoid()
+        output = sigmoid(output) # (1, fov, 2)
+        output = output.squeeze(0) # (fov, 2)
 
-    # original represents the original points that weren't buffered
-    mask = labels != -1
-    mask = mask.squeeze(-1) # (original)
-    
-    # Apply mask to get original points
-    output = output[mask] # (original, 2)
-    input = input.squeeze(0)[mask] # (original, d)
-    labels = labels[mask] # (original, 1)
-    confidence = confidence[mask] # (original, 1)
-    adj = adj.squeeze(0)[mask, :][:, mask] # (original, original)
+        # original represents the original points that weren't buffered
+        mask = labels != -1
+        mask = mask.squeeze(-1) # (original)
+        
+        # Apply mask to get original points
+        output = output[mask] # (original, 2)
+        input = input.squeeze(0)[mask] # (original, d)
+        labels = labels[mask] # (original, 1)
+        confidence = confidence[mask] # (original, 1)
+        adj = adj.squeeze(0)[mask, :][:, mask] # (original, original)
 
-    # Vertices is always first in the input
-    vertices = input[:, :3]
-    edges = adjency_to_edge_list(adj)
+        # Vertices is always first in the input
+        vertices = input[:, :3]
+        edges = adjency_to_edge_list(adj)
 
-    seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
-    cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
-    mesh = cv_seg.mesh.get(root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False)[root]
-    root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
+        seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
+        cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
+        mesh = cv_seg.mesh.get(root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False)[root]
+        root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
 
-    return vertices, edges, labels, confidence, output, root, root_mesh
+        is_proofread = data.get_is_proofread(root)
+        num_initial_vertices = data.get_num_initial_vertices(root)
+
+    return vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices
 
 def visualize(vertices, edges, labels, confidence, output, root_mesh, path):
     pv.set_jupyter_backend('trame')
@@ -82,12 +88,10 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, path):
     # Calculate center of mass
     if len(confident_merge_points) > 0:
         center_of_mass = confident_merge_points.mean(axis=0)
-        print("center of mass", center_of_mass)
+        # print("Center of mass", center_of_mass)
     else:
-        print("No 'Confident Merge Error' points found.")
         center_of_mass = vertices.mean(axis=0)  # Use center of all points as fallback
-
-    
+        # print("No merge errors")
     
     plotter.subplot(0)
     plotter.add_mesh(skel_poly, color='black', )
@@ -129,19 +133,28 @@ if __name__ == "__main__":
     with open(CONFIG_PATH, 'r') as f:
         config = json.load(f)
 
-    data = AutoProofDataset(config)
+    data = AutoProofDataset(config, 'test')
 
     model = create_model(config)
     ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20241104_132019/model_29'
     model.load_state_dict(torch.load(ckpt_path))
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # always cpu
+    device = "cpu"
     model.to(device)
     model.eval()
 
-    root = 864691135654785218
-    # root = 864691135463333789
-    idx = data.get_root_index(root)
-    # root = 864691135778235581
-    path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_default_fov.html'
-    vertices, edges, labels, confidence, output, root, root_mesh = get_root_output(model, device, data, idx)
-    visualize(vertices, edges, labels, confidence, output, root_mesh, path)
+    # root = 864691134884807418
+    # root = 864691135654785218 # in train
+    # root = 864691135463333789 in train
+    # idx = data.get_root_index(root)
+    # root = 864691135778235581 in train
+    # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_500_fov.html'
+    # vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_intitial_vertices = get_root_output(model, device, data, root)
+    # print("is_proofread", is_proofread)
+    # print("num_intitial_vertice", num_intitial_vertices)
+    # visualize(vertices, edges, labels, confidence, output, root_mesh, path)
+
+    roots = [864691136831441518, 864691136379030485, 864691135585405308, 864691135278463137, 864691136673368967, 864691136084808300, 864691135976247107, 864691135946876001, 864691135725734719, 864691135740501099, 864691135772003147, 864691136024491577]
+    for root in roots:
+        print("root", root, "num initial", data.get_num_initial_vertices(root))

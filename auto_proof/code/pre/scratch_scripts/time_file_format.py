@@ -5,14 +5,17 @@ import time
 import h5py
 import torch
 
-roots = data_utils.load_txt('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_label_roots_459972.txt')
-roots = roots[:100]
+roots = data_utils.load_txt('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt')
+# roots = roots[:1]
 
-# root = roots[0]
+# root = roots[150]
+root = 864691135294197260
+print(root)
+
 # roots = [roots[0]]
 
 
-new_file_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/mini_features/first_1_group.hdf5'
+new_file_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/proofread_features/{root}.hdf5'
 
 # for root in roots:
 #     root_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features/{root}_1000.h5py'
@@ -36,30 +39,37 @@ new_file_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stan
 
 # Took out some stuff, just want to see basic read time difference on numpy
 def read_one_root(root, file_path):
+    print(file_path)
     with h5py.File(file_path, 'r') as read_new_file:
         try: 
-            f = read_new_file[str(root)]
+            # f = read_new_file[str(root)]
+            f = read_new_file
             vertices = f['vertices'][:]
+            print(vertices)
             compartment = f['compartment'][:]
+            print(compartment)
             radius = f['radius'][:]
-            pos_enc = f['pos_enc'][:]
-            labels = f['label'][:]
-            confidence = f['confidence'][:]
+            print(radius)
+            # pos_enc = f['pos_enc'][:]
+            # labels = f['label'][:]
+            # confidence = f['confidence'][:]
             num_vertices = f['num_vertices'][()]
 
-            rank = f['rank_1'][:]
+            # rank = f['rank_1'][:]
 
             size = len(vertices)
             # print("size", size)
 
             edges = f['edges'][:]
+            print(edges)
 
         except Exception as e:
             print("root: ", root, "error: ", e)
 
 # roots = [864691135778235581 (921), 864691135463516222 (1000), 864691135113539993 (1415), 864691135355969743 (1186), 864691134940631907 (1121)]
 # test_roots = [864691135778235581, 864691135463516222, 864691135113539993, 864691135355969743, 864691134940631907]
-test_roots = [864691135778235581]
+# test_roots = [864691135778235581]
+test_roots = [root]
 
 avg_time = 0
 runs = 10

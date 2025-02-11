@@ -1,6 +1,5 @@
-from auto_proof.code.dataset import build_dataloader, AutoProofDataset
+from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import get_root_output, visualize
-from auto_proof.code.pre.data_utils import initialize
 
 import os
 import torch
@@ -12,9 +11,10 @@ from datetime import datetime
 import math
 import numpy as np
 import neptune
+import multiprocessing
 
 class Trainer(object):
-    def __init__(self, config, model, dataset, run):
+    def __init__(self, config, model, train_dataset, val_dataset, test_dataset, run):
         self.run = run
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -26,17 +26,17 @@ class Trainer(object):
         self.save_every = config['trainer']['save_ckpt_every']
         self.batch_size = config['loader']['batch_size']
         self.data_dir = config['data']['data_dir']
-        _, _, _, client, _ = initialize()
-        self.client = client
 
         ### datasets
-        train_loader, val_loader, train_dataset, val_dataset = build_dataloader(dataset, config, run)
-        self.train_loader = train_loader
-        self.val_loader = val_loader
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
+        self.test_dataset = test_dataset
+        self.train_loader = build_dataloader(config, train_dataset, run, 'train')
+        self.val_loader = build_dataloader(config, val_dataset, run, 'val')
+        self.test_loader = build_dataloader(config, test_dataset, run, 'test')
         self.train_size = len(train_dataset) 
         self.val_size = len(val_dataset)
+        self.test_size = len(test_dataset)
 
         self.class_weights = torch.tensor([9, 1]).float().to(self.device)
 
@@ -44,20 +44,10 @@ class Trainer(object):
         self.epochs = config['optimizer']['epochs']
         self.epoch = 0
         self.lr = config['optimizer']['lr']
-        self.max_iter = config['optimizer']['max_iterations']
-        self.curr_iter = 0
-        self.visualize_num = config['trainer']['visualize_num']
-        self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
-        # lambda1 = lambda epoch: epoch / self.epochs
-        # self.scheduler = LambdaLR(self.optimizer, lr_lambda=lambda epoch: self.warmup_cosine_decay(epoch, self.epochs // 10, self.epochs))
-        self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
 
-    # Find better one
-    def warmup_cosine_decay(self, epoch, warmup_epochs, total_epochs):
-        if epoch < warmup_epochs:
-            return epoch / warmup_epochs
-        else:
-            return 0.5 * (1 + math.cos(math.pi * (epoch - warmup_epochs) / (total_epochs - warmup_epochs)))
+        self.visualize_rand_num = config['trainer']['visualize_rand_num']
+        self.visualize_cutoff = config['trainer']['visualize_cutoff']
+        self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
 
     def train(self):     
         best_vloss = 1_000_000
@@ -65,8 +55,14 @@ class Trainer(object):
         print('Initial Epoch {}/{} | LR {:.4f}'.format(self.epoch, self.epochs, self.optimizer.state_dict()['param_groups'][0]['lr']))
         start_datetime = datetime.now()
         self.run["train/start"] = start_datetime
-        # with tqdm(total=self.epochs) as tqdm_tracker:
-        while self.curr_iter < self.max_iter:
+
+        # Change literally all of these examples because they're not pretty
+        constant_root_tuples = [(864691135778235581, 'train'), (864691136379030485,  'val'), (864691136443843459, 'test'), (864691134918370314, 'test')]
+        dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
+
+
+        for i in range(self.epochs):
+            self.epoch = i
             self.run["epoch"].append(self.epoch)
             self.run["lr"].append(self.optimizer.state_dict()['param_groups'][0]['lr'])
 
@@ -76,39 +72,75 @@ class Trainer(object):
             self.run["train/avg_loss"] = avg_loss
             train_end_datetime = datetime.now()
             self.run["train/end"] = train_end_datetime
-    
+
+            self.model.eval()
             with torch.no_grad():
-                self.model.eval()
                 avg_vloss, f1, recall, g_mean = self.val_epoch()
                 self.run["val/avg_loss"].append(avg_vloss)
                 self.run["val/f1"].append(f1)
                 self.run["val/recall"].append(recall)
                 self.run["g_mean"].append(g_mean)
+                # Will visualizing currently keep reseting between eval and non eval because of async
+                # p = multiprocessing.Process(target=self.visualize_examples, args=(timestamp, constant_root_tuples, dataset_dict))
+                # p.start()  # Start the visualization process in the background
 
-            self.scheduler.step(avg_vloss)
-            print('Epoch {}/{} | Loss {:.5f} | Val loss {:.5f} | F1 {:.5f} | Recall {:.5f} | G-mean {:.5f}| LR {:.6f}'.format(self.epoch, self.epochs, avg_loss, avg_vloss, f1, recall, g_mean, self.optimizer.state_dict()['param_groups'][0]['lr']))
+                # Asynchronous Visualization (using a Pool for proper CUDA handling):
+                # with multiprocessing.Pool(processes=1) as pool: # Create a process pool
+                #     pool.apply_async(self.visualize_examples, (timestamp, constant_root_tuples, dataset_dict)) # Corrected: Use apply_async
+
+            print('Epoch {}/{} | Loss {:.5f} | Val loss {:.5f} | F1 {:.5f} | Recall {:.5f} | G-mean {:.5f}| LR {:.6f}'.format(self.epoch + 1, self.epochs, avg_loss, avg_vloss, f1, recall, g_mean, self.optimizer.state_dict()['param_groups'][0]['lr']))
 
             if avg_vloss < best_vloss and self.epoch >= (self.epochs // 2):
                 best_vloss = avg_vloss
                 self.save_checkpoint(timestamp)
-            elif self.curr_iter % self.save_every == 0:
+            elif self.epoch % self.save_every == 0:
                 self.save_checkpoint(timestamp)
 
             # visualize
-            save_dir = f'{self.ckpt_dir}{timestamp}'
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-            for i in range(self.visualize_num):
-                rand_idx = np.random.randint(0, self.val_size)
-                vertices, edges, labels, confidence, output, root = get_root_output(self.model, self.device, self.val_dataset, rand_idx, self.client)
-                save_path = f'{save_dir}/{root}_{self.epoch}.html'
-                visualize(vertices, edges, labels, confidence, output, save_path)
-                self.run[f"visuals/{self.epoch}/{root}"].upload(save_path)
-            self.epoch += 1
+            # visualize_start = datetime.now()
+            # self.visualize_examples(timestamp, constant_root_tuples, dataset_dict)
+            # visualize_end = datetime.now();
+            # print("visualizing took", visualize_end - visualize_start)
+        
         end_datetime = datetime.now()
         total_time = end_datetime - start_datetime
         self.run["total_time"] = total_time
 
+    def visualize_examples(self,timestamp, constant_root_tuples, dataset_dict):
+        save_dir = f'{self.ckpt_dir}{timestamp}'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        for constant_root_tuple in constant_root_tuples:
+            self.visualize_root(constant_root_tuple[0], True, constant_root_tuple[1], dataset_dict, save_dir)
+        for i in range(self.visualize_rand_num):
+            root = self.train_dataset.get_random_root()
+            while self.train_dataset.get_num_initial_vertices(root) > self.visualize_cutoff:
+                root = self.train_dataset.get_random_root()
+            self.visualize_root(root, False, 'train', dataset_dict, save_dir)
+
+            root = self.val_dataset.get_random_root()
+            while self.val_dataset.get_num_initial_vertices(root) > self.visualize_cutoff:
+                root = self.train_dataset.get_random_root()
+            self.visualize_root(root, False, 'val', dataset_dict, save_dir)
+
+            root = self.test_dataset.get_random_root()
+            while self.test_dataset.get_num_initial_vertices(root) > self.visualize_cutoff:
+                root = self.test_dataset.get_random_root()
+            self.visualize_root(root, False, 'test', dataset_dict, save_dir)
+
+    def visualize_root(self, root, is_constant, mode, dataset_dict, save_dir):
+        print("visualizing root", root)
+        dataset = dataset_dict[mode]
+        vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices = get_root_output(self.model, "cpu", dataset, root)
+        random = 'random'
+        if is_constant:
+            random = 'constant'
+        edit = 'edit'
+        if is_proofread:
+            edit = 'proofread'
+        save_path = f'{save_dir}/{self.epoch}_{random}_{mode}_{edit}_{root}.html'
+        visualize(vertices, edges, labels, confidence, output, root_mesh, save_path)
+        self.run[f"visuals/{self.epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
 
     def train_epoch(self):
         running_loss = 0.
@@ -118,7 +150,7 @@ class Trainer(object):
                 self.optimizer.zero_grad(set_to_none=True)
 
                 input, labels, confidence, adj, _ = [x.float().to(self.device) for x in data]
-
+                self.model.train() # Marking this here due to async
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, self.class_weights)
                 self.run["train/loss"].append(loss)
@@ -139,7 +171,6 @@ class Trainer(object):
                 # if i % 1000 == 999:
                 #     last_loss = running_loss / (i + 1)
                 #     print('  batch {} loss: {}'.format(i + 1, last_loss))
-                self.curr_iter += 1
                 pbar.update()
             # self.scheduler.step()
             return running_loss / (i + 1)

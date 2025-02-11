@@ -25,3 +25,5 @@ Cloud volume env: Create base conda env and then run pip install -r cv_requireme
 Need to run conda install -c conda-forge trame in order to save html file from pyvista
 
 Everything works now I just needed to run conda install pip first so that pip works in the conda env instaed of outside
+
+It actually doesn't work when I actually try to use graph tool

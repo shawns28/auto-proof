@@ -9,4 +9,3 @@ neptune
 pyvista[jupyter]
 trame
 trame-vtk
-cloud-volume
