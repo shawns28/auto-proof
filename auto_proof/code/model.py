@@ -223,20 +223,6 @@ class GraphTransformer(nn.Module):
         # print("losses post confidence", losses)
         return losses.mean()
 
-    # Not using confidence for the accuracy currently
-    def accuracy(self, output, labels):
-        mask = labels != -1
-        mask = mask.squeeze(-1)
-        output = output[mask]
-        labels = labels[mask]
-
-        tp = torch.sum(torch.logical_and(output == 1, labels == 1)).item()
-        tn = torch.sum(torch.logical_and(output == 0, labels == 0)).item()
-        fp = torch.sum(torch.logical_and(output == 0, labels == 1)).item()
-        fn = torch.sum(torch.logical_and(output == 1, labels == 0)).item()
-
-        return tp, tn, fp, fn
-
 
 def create_model(config):
     num_classes = config['model']['num_classes']

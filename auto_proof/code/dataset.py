@@ -16,7 +16,7 @@ class AutoProofDataset(Dataset):
     def __init__(self, config, mode):
         self.config = config
         # 'root' is all, 'train', 'val', 'test'
-        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])[:6000] # NOTE: Currently only using 1000
+        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.num_shards = config['data']['num_shards']
@@ -59,7 +59,7 @@ class AutoProofDataset(Dataset):
                 #     f = shard_file[str(root)]
                 vertices = torch.from_numpy(f['vertices'][:])
                 # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
+                # compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
                 radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
                 pos_enc = torch.from_numpy(f['pos_enc'][:])
                 labels = torch.from_numpy(f['label'][:])
@@ -82,9 +82,9 @@ class AutoProofDataset(Dataset):
                 # Currently concatenating the pos enc to node features
                 # Should remove the ones if not going to predict the padded ones
                 # SHOULD REMOVE THE ONES NOW SINCE I USE -1 later to indicate that the label is padded anyway
-                input = torch.cat((vertices, compartment, radius, pos_enc, torch.ones(size, 1)), dim=1)
+                # input = torch.cat((vertices, compartment, radius, pos_enc, torch.ones(size, 1)), dim=1)
                 # No longer use compartment or the ones
-                # input = torch.cat((vertices, radius, pos_enc), dim=1)
+                input = torch.cat((vertices, radius, pos_enc), dim=1)
 
                 edges = f['edges'][:]
 

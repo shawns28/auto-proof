@@ -1,11 +1,12 @@
 from auto_proof.code.model import create_model
-from auto_proof.code.train import Trainer
+from auto_proof.code.train import Trainer, visualize_examples
 from auto_proof.code.dataset import AutoProofDataset
 from auto_proof.code.pre import data_utils
 
 import json
 import neptune
 import argparse
+import multiprocessing
 
 def main():
     config = data_utils.get_config()
@@ -35,6 +36,8 @@ def main():
 
     model = create_model(config)
     trainer = Trainer(config, model, train_dataset, val_dataset, test_dataset, run)
+
+    # multiprocessing.set_start_method('spawn') This makes it go incredibly slow
 
     print("Start training")
     trainer.train()

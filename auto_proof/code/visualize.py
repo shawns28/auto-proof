@@ -47,6 +47,7 @@ def get_root_output(model, device, data, root):
         seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
         cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
         mesh = cv_seg.mesh.get(root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False)[root]
+        
         root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
 
         is_proofread = data.get_is_proofread(root)
@@ -118,7 +119,7 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, path):
     vertices_output = vertices.copy()
     skel_poly_output = pv.PolyData(vertices_output, lines=lines)
     plotter.add_mesh(skel_poly_output, color='black')
-    plotter.add_points(vertices_output, scalars=output, label='output', cmap='RdYlGn', point_size=10, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'output'})
+    plotter.add_points(vertices_output, scalars=output, label='predictions', cmap='RdYlGn', point_size=10, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'output'})
     # Doesn't work for interactive it seems
     plotter.add_text("Output", font_size=14) 
     plotter.link_views()
