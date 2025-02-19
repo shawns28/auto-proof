@@ -29,7 +29,7 @@
         "num_workers": 32,
         "prefetch_factor": 0,
         "batch_size": 32,
-        "seed_index": 2,
+        "seed_index": 1,
         "fov": 500,
         "feat_dim": 36
     },
@@ -41,8 +41,7 @@
         "class_weights": 9
     },
     "optimizer": {
-        "epochs": 35,
-        "lr": 0.01,
-        "exp_decay": 0.1
+        "epochs": 50,
+        "lr": 0.0001
     }
 }

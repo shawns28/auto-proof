@@ -16,7 +16,7 @@ class AutoProofDataset(Dataset):
     def __init__(self, config, mode):
         self.config = config
         # 'root' is all, 'train', 'val', 'test'
-        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])
+        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])[:6000]
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.num_shards = config['data']['num_shards']
@@ -104,7 +104,7 @@ class AutoProofDataset(Dataset):
             print("root: ", root, "error: ", e)
             return None
             
-        return input, labels, confidence, adj, root
+        return input, labels, confidence, adj
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)

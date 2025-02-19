@@ -1,63 +1,25 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import get_root_output, visualize
+from auto_proof.code.model import create_model
 
 import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from datetime import datetime
 import math
 import numpy as np
 import neptune
 import multiprocessing
-
-
-def visualize_examples(model, device, timestamp, train_dataset, val_dataset, test_dataset, visualize_cutoff, epoch, run, ckpt_dir, visualize_rand_num):
-    # Change literally all of these examples because they're not pretty
-    constant_root_tuples = [(864691135778235581, 'train'), (864691136379030485,  'val'), (864691136443843459, 'test'), (864691134918370314, 'test')]
-    dataset_dict = {'train': train_dataset, 'val': val_dataset, 'test': test_dataset}
-
-    # device = torch.device("cpu")
-    # model.to(device)
-    # model.eval()
-
-    save_dir = f'{ckpt_dir}{timestamp}'
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    for constant_root_tuple in constant_root_tuples:
-        visualize_root(model, device, constant_root_tuple[0], True, constant_root_tuple[1], dataset_dict, epoch, run, save_dir)
-    for i in range(visualize_rand_num):
-        for mode, dataset in dataset_dict.items():
-            root = dataset.get_random_root()
-            while dataset.get_num_initial_vertices(root) > visualize_cutoff:
-                root = dataset.get_random_root()
-            visualize_root(model, device, root, False, mode, dataset_dict, epoch, run, save_dir)
-
-def visualize_root(model, device, root, is_constant, mode, dataset_dict, epoch, run, save_dir):
-    #mprint("Visualize root", root)
-    dataset = dataset_dict[mode]
-    try:
-        vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices = get_root_output(model, device, dataset, root)
-        random = 'random'
-        if is_constant:
-            random = 'constant'
-        edit = 'edit'
-        if is_proofread:
-            edit = 'proofread'
-        save_path = f'{save_dir}/{epoch}_{random}_{mode}_{edit}_{root}.html'
-        visualize(vertices, edges, labels, confidence, output, root_mesh, save_path)
-        run[f"visuals/{epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
-    except Exception as e:
-        print("Failed visualization for root id: ", root, "error: ", e)
+import random
 
 class Trainer(object):
     def __init__(self, config, model, train_dataset, val_dataset, test_dataset, run):
         self.run = run
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print("gpu: ", torch.cuda.get_device_name(0))
         self.run["gpu"] = torch.cuda.get_device_name(0)
         self.model = model.to(self.device)
         self.config = config
@@ -77,7 +39,7 @@ class Trainer(object):
         self.val_size = len(val_dataset)
         self.test_size = len(test_dataset)
 
-        self.class_weights = torch.tensor([9, 1]).float().to(self.device)
+        self.class_weights = torch.tensor([config['trainer']['class_weights'], 10 - config['trainer']['class_weights']]).float().to(self.device)
 
         ### trainings params
         self.epochs = config['optimizer']['epochs']
@@ -87,6 +49,8 @@ class Trainer(object):
         self.visualize_rand_num = config['trainer']['visualize_rand_num']
         self.visualize_cutoff = config['trainer']['visualize_cutoff']
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
+        # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
+        self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
 
     def train(self):     
         best_vloss = 1_000_000
@@ -111,29 +75,23 @@ class Trainer(object):
             with torch.no_grad():
                 avg_vloss = self.val_epoch()
                 self.run["val/avg_loss"].append(avg_vloss)
-                # Will visualizing currently keep reseting between eval and non eval because of async
-                # p = multiprocessing.Process(target=self.visualize_examples, args=(timestamp, constant_root_tuples, dataset_dict))
-                # p.start()  # Start the visualization process in the background
-
-                # Asynchronous Visualization (using a Pool for proper CUDA handling):
-                # with multiprocessing.Pool(processes=1) as pool: # Create a process pool
-                #     self.run["test"] = "hi"
-                #     pool.apply_async(visualize_examples, (self.model, timestamp, self.train_dataset, self.val_dataset, self.test_dataset, self.visualize_cutoff, self.epoch, self.run, self.ckpt_dir, self.visualize_rand_num))
-                #     pool.close()  # Important: Close the pool before joining
-                #     pool.join()
-                # visualize_examples(self.model, timestamp, self.train_dataset, self.val_dataset, self.test_dataset, self.visualize_cutoff, self.epoch, self.run, self.ckpt_dir, self.visualize_rand_num)
+                print("Starting visualization")
                 visualize_start = datetime.now()
-                visualize_examples(self.model, self.device, timestamp, self.train_dataset, self.val_dataset, self.test_dataset, self.visualize_cutoff, self.epoch, self.run, self.ckpt_dir, self.visualize_rand_num)                    
+                self.visualize_examples(timestamp)                    
                 visualize_end = datetime.now()
                 print("visualizing took", visualize_end - visualize_start)
 
             print('Epoch {}/{} | Loss {:.5f} | Val loss {:.5f} | LR {:.6f}'.format(self.epoch + 1, self.epochs, avg_loss, avg_vloss, self.optimizer.state_dict()['param_groups'][0]['lr']))
+            
+            self.scheduler.step(avg_vloss)
 
             if avg_vloss < best_vloss and self.epoch >= (self.epochs // 2):
                 best_vloss = avg_vloss
                 self.save_checkpoint(timestamp)
             elif self.epoch % self.save_every == 0:
                 self.save_checkpoint(timestamp)
+            
+            
         
         end_datetime = datetime.now()
         total_time = end_datetime - start_datetime
@@ -143,10 +101,9 @@ class Trainer(object):
         running_loss = 0
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
-                input, labels, confidence, adj, _ = [x.float().to(self.device) for x in data]
-                # self.model.train() # Marking this here due to async
-
                 self.optimizer.zero_grad()
+                input, labels, confidence, adj = [x.float().to(self.device) for x in data]
+                # self.model.train() # Marking this here due to async
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, self.class_weights)
@@ -167,7 +124,6 @@ class Trainer(object):
                     if i < 10:
                         self.run["train/loss"].append(running_loss / (i + 1))
                 pbar.update()
-            # self.scheduler.step()
         return running_loss / (self.train_size / self.batch_size)
         
 
@@ -180,9 +136,12 @@ class Trainer(object):
             metrics[threshold] = {"tp": 0, "tn": 0, "fp": 0, "fn": 0}
         running_vloss = 0
     
+        # total_merge_prob = []
+        # total_labels = []
+
         with tqdm(total=self.val_size / self.batch_size, desc="val") as pbar:
             for i, data in enumerate(self.val_loader):
-                input, labels, confidence, adj, _ = [x.float().to(self.device) for x in data]
+                input, labels, confidence, adj = [x.float().to(self.device) for x in data]
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, self.class_weights)
                 self.run["val/loss"].append(loss)
@@ -195,10 +154,15 @@ class Trainer(object):
                 # output = torch.argmax(output, dim=-1)
                 labels = labels.squeeze(-1)
 
+                mask = labels != -1
+                output_merge_prob = output_merge_prob[mask]
+                labels = labels[mask]
+
                 for threshold in thresholds:
                     # Doing the inverse here since if we have 0.9 for merge error probability and a threshold of 0.7
                     # then we want the label for that to be 0. If the proabability of merge is higher than threshold
-                    # then we want the label to be 0. 
+                    # then we want the label to be 0.
+
                     thresholded_output = (output_merge_prob < threshold).int()
 
                     curr_tp, curr_tn, curr_fp, curr_fn = self.accuracy(thresholded_output, labels)
@@ -238,10 +202,6 @@ class Trainer(object):
 
     # Not using confidence for the accuracy currently
     def accuracy(self, output, labels):
-        mask = labels != -1
-        output = output[mask]
-        labels = labels[mask]
-
         tp = torch.sum(torch.logical_and(output == 1, labels == 1)).item()
         tn = torch.sum(torch.logical_and(output == 0, labels == 0)).item()
         fp = torch.sum(torch.logical_and(output == 1, labels == 0)).item()
@@ -254,5 +214,48 @@ class Trainer(object):
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
         model_path = 'model_{}.pt'.format(self.epoch)
-        torch.save(self.model.state_dict(), f'{directory_path}/{model_path}')
-        self.run["model_ckpts"].upload(f'{directory_path}/{model_path}')
+        complete_path = f'{directory_path}/{model_path}'
+        torch.save(self.model.state_dict(), complete_path)
+        self.run["model_ckpts"].upload(complete_path)
+
+    def visualize_examples(self, timestamp):
+        dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
+
+        save_dir = f'{self.ckpt_dir}{timestamp}'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        visualize_tuples = [
+            (864691135463333789, True, 'train'), 
+            (864691136379030485, True, 'val'), 
+            (864691136443843459, True, 'test'), 
+            (864691134918370314, True, 'test')]
+        
+        for _ in range(self.visualize_rand_num):
+            mode, dataset = random.choice(list(dataset_dict.items()))
+            root = dataset.get_random_root()
+            while dataset.get_num_initial_vertices(root) > self.visualize_cutoff:
+                root = dataset.get_random_root()
+            visualize_tuples.append((root, False, mode))
+
+        with tqdm(total=len(visualize_tuples)) as pbar:
+            for visualize_tuple in visualize_tuples:
+                root, is_constant, mode = visualize_tuple
+                self.visualize_root(root, is_constant, mode, dataset_dict, save_dir)
+                pbar.update()
+    
+    def visualize_root(self, root, is_constant, mode, dataset_dict, save_dir):
+        try:
+            dataset = dataset_dict[mode]
+            vertices, edges, labels, confidence, output, root_mesh, is_proofread, _ = get_root_output(self.model, self.device, dataset, root)
+            random = 'random'
+            if is_constant:
+                random = 'constant'
+            edit = 'edit'
+            if is_proofread:
+                edit = 'proofread'
+            save_path = f'{save_dir}/{self.epoch}_{random}_{mode}_{edit}_{root}.html'
+            visualize(vertices, edges, labels, confidence, output, root_mesh, save_path)
+            self.run[f"visuals/{self.epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
+        except Exception as e:
+            print("Failed visualization for root id: ", root, "error: ", e)
