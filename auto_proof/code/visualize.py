@@ -7,7 +7,7 @@ import torch.nn as nn
 import json
 import pyvista as pv
 import numpy as np
-from cloudvolume import CloudVolume
+# from cloudvolume import CloudVolume
 from tqdm import tqdm
 import multiprocessing
 # Remember to remove morphlink package that already exists in directory

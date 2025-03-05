@@ -1,6 +1,5 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import get_root_output, visualize
-from auto_proof.code.model import create_model
 
 import os
 import torch
@@ -14,6 +13,8 @@ import numpy as np
 import neptune
 import multiprocessing
 import random
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve
 
 class Trainer(object):
     def __init__(self, config, model, train_dataset, val_dataset, test_dataset, run):
@@ -59,7 +60,11 @@ class Trainer(object):
         start_datetime = datetime.now()
         self.run["train/start"] = start_datetime
 
-        for i in range(self.epochs):
+        save_dir = f'{self.ckpt_dir}{timestamp}'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        for i in range(1, self.epochs + 1):
             self.epoch = i
             self.run["epoch"].append(self.epoch)
             self.run["lr"].append(self.optimizer.state_dict()['param_groups'][0]['lr'])
@@ -73,26 +78,25 @@ class Trainer(object):
 
             self.model.eval()
             with torch.no_grad():
-                avg_vloss = self.val_epoch()
+                avg_vloss = self.val_epoch(save_dir)
                 self.run["val/avg_loss"].append(avg_vloss)
+
                 print("Starting visualization")
                 visualize_start = datetime.now()
-                self.visualize_examples(timestamp)                    
+                self.visualize_examples(save_dir)                    
                 visualize_end = datetime.now()
                 print("visualizing took", visualize_end - visualize_start)
 
-            print('Epoch {}/{} | Loss {:.5f} | Val loss {:.5f} | LR {:.6f}'.format(self.epoch + 1, self.epochs, avg_loss, avg_vloss, self.optimizer.state_dict()['param_groups'][0]['lr']))
+            print('Epoch {}/{} | Loss {:.5f} | Val loss {:.5f} | LR {:.6f}'.format(self.epoch, self.epochs, avg_loss, avg_vloss, self.optimizer.state_dict()['param_groups'][0]['lr']))
             
             self.scheduler.step(avg_vloss)
 
             if avg_vloss < best_vloss and self.epoch >= (self.epochs // 2):
                 best_vloss = avg_vloss
-                self.save_checkpoint(timestamp)
+                self.save_checkpoint(save_dir)
             elif self.epoch % self.save_every == 0:
-                self.save_checkpoint(timestamp)
+                self.save_checkpoint(save_dir)
             
-            
-        
         end_datetime = datetime.now()
         total_time = end_datetime - start_datetime
         self.run["total_time"] = total_time
@@ -107,7 +111,7 @@ class Trainer(object):
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, self.class_weights)
-                self.run["train/loss"].append(loss)
+                # self.run["train/loss"].append(loss)
 
                 # optimize 
                 loss.backward()
@@ -127,17 +131,14 @@ class Trainer(object):
         return running_loss / (self.train_size / self.batch_size)
         
 
-    def val_epoch(self):
+    def val_epoch(self, save_dir):
         # Thresholds for merge error
-        thresholds = [0.05, 0.1, 0.5, 0.9, 0.95]
-        metrics = {}
-
-        for threshold in thresholds:
-            metrics[threshold] = {"tp": 0, "tn": 0, "fp": 0, "fn": 0}
         running_vloss = 0
-    
-        # total_merge_prob = []
-        # total_labels = []
+
+        recall_targets = [0.99, 0.95, 0.9, 0.5]
+
+        total_merge_prob = torch.zeros(1).to(self.device)
+        total_labels = torch.zeros(1).to(self.device)
 
         with tqdm(total=self.val_size / self.batch_size, desc="val") as pbar:
             for i, data in enumerate(self.val_loader):
@@ -149,7 +150,7 @@ class Trainer(object):
 
                 sigmoid = nn.Sigmoid()
                 output_prob = sigmoid(output)
-                # The first column is for the merge error probabilities
+                # The first column is for the merge error  probabilities
                 output_merge_prob = output_prob[:, :, 0] # [:, :, 0] to account for batches
                 # output = torch.argmax(output, dim=-1)
                 labels = labels.squeeze(-1)
@@ -158,47 +159,51 @@ class Trainer(object):
                 output_merge_prob = output_merge_prob[mask]
                 labels = labels[mask]
 
-                for threshold in thresholds:
-                    # Doing the inverse here since if we have 0.9 for merge error probability and a threshold of 0.7
-                    # then we want the label for that to be 0. If the proabability of merge is higher than threshold
-                    # then we want the label to be 0.
+                total_merge_prob = torch.cat((total_merge_prob, output_merge_prob), dim=0)
+                total_labels = torch.cat((total_labels, labels), dim=0)
 
-                    thresholded_output = (output_merge_prob < threshold).int()
-
-                    curr_tp, curr_tn, curr_fp, curr_fn = self.accuracy(thresholded_output, labels)
-                    metrics[threshold]["tp"] += curr_tp
-                    metrics[threshold]["tn"] += curr_tn
-                    metrics[threshold]["fp"] += curr_fp
-                    metrics[threshold]["fn"] += curr_fn
-    
                 pbar.update()
-            
-        # precision and recall for negative since that represents merge spots
-        for threshold in thresholds:
-            precision = 0
-            recall = 0
-            f1 = 0
-            g_mean = 0
 
-            # print("threshold: ", threshold)
-            # print("tp/tn/fp/fn", metrics[threshold]["tp"], metrics[threshold]["tn"], metrics[threshold]["fp"], metrics[threshold]["fn"])
-
-            if metrics[threshold]["tn"] + metrics[threshold]["fn"] != 0:
-                precision = metrics[threshold]["tn"] / (metrics[threshold]["tn"] + metrics[threshold]["fn"])
-            if metrics[threshold]["tn"] + metrics[threshold]["fp"] != 0:
-                recall = metrics[threshold]["tn"] / (metrics[threshold]["tn"] + metrics[threshold]["fp"])
-            if precision + recall != 0:
-                f1 = 2 * (precision * recall) / (precision + recall)
-            if metrics[threshold]["tp"] + metrics[threshold]["fn"] != 0:
-                true_recall = metrics[threshold]["tp"] / (metrics[threshold]["tp"] + metrics[threshold]["fn"])
-                g_mean = math.sqrt(recall * true_recall)
-
-            self.run[f"{threshold}/precision"].append(precision)
-            self.run[f"{threshold}/recall"].append(recall)
-            self.run[f"{threshold}/f1"].append(f1)
-            self.run[f"{threshold}/g_mean"].append(g_mean)
-
+        self.statistics(total_labels, total_merge_prob, recall_targets, save_dir)
+        
         return running_vloss / (self.val_size / self.batch_size)
+
+    def statistics(self, total_labels, total_merge_prob, recall_targets, save_dir):
+        # Flipping the labels to make merge errors 1 for scikit-learn precision recall curve
+        # Remove first element because that was for initialization
+        total_labels = 1 - total_labels.cpu().detach().numpy()[1:]
+        total_merge_prob = total_merge_prob.cpu().detach().numpy()[1:]
+
+        precision_curve, recall_curve, threshold_curve = precision_recall_curve(total_labels, total_merge_prob)
+
+        plt.figure(figsize=(8, 8))
+        plt.plot(recall_curve, precision_curve, marker='.', markersize=2, label='Precision-Recall curve')
+        plt.xlabel('Recall', fontsize=14)
+        plt.ylabel('Precision', fontsize=14)
+        plt.title('Merge Error Precision-Recall Curve')
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+
+        for target_recall in recall_targets:
+            pinned_threshold, pinned_precision, pinned_recall = self.find_pinned_recall(precision_curve, recall_curve, threshold_curve, target_recall)
+            plt.scatter(pinned_recall, pinned_precision, c='red', s=30, label=f'Target Recall: {target_recall:.2f}, Recall: {pinned_recall:.2f}, Precision: {pinned_precision:.2f}, Threshold: {pinned_threshold:.2f}')  # Mark with a red dot
+        
+        plt.legend()
+        plt.grid(True)
+        save_path = f'{save_dir}/precision_recall_{self.epoch}.png'
+        plt.savefig(save_path)
+        self.run["pinned/precision_recall_curve"].append(neptune.types.File(save_path))
+
+    def find_pinned_recall(self, precision_curve, recall_curve, threshold_curve, target_recall):
+        pinned_idx = np.argmin(np.abs(recall_curve - target_recall))
+        # Invert this to be consistent with other visualization
+        pinned_threshold = 1 - threshold_curve[pinned_idx]
+        pinned_precision = precision_curve[pinned_idx]
+        pinned_recall = recall_curve[pinned_idx]
+
+        return pinned_threshold, pinned_precision, pinned_recall
 
     # Not using confidence for the accuracy currently
     def accuracy(self, output, labels):
@@ -209,21 +214,14 @@ class Trainer(object):
 
         return tp, tn, fp, fn
 
-    def save_checkpoint(self, timestamp):
-        directory_path = f'{self.ckpt_dir}/{timestamp}'
-        if not os.path.exists(directory_path):
-            os.makedirs(directory_path)
+    def save_checkpoint(self, save_dir):
         model_path = 'model_{}.pt'.format(self.epoch)
-        complete_path = f'{directory_path}/{model_path}'
+        complete_path = f'{save_dir}/{model_path}'
         torch.save(self.model.state_dict(), complete_path)
         self.run["model_ckpts"].upload(complete_path)
 
-    def visualize_examples(self, timestamp):
+    def visualize_examples(self, save_dir):
         dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
-
-        save_dir = f'{self.ckpt_dir}{timestamp}'
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
 
         visualize_tuples = [
             (864691135463333789, True, 'train'), 

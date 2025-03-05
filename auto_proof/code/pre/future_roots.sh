@@ -5,10 +5,9 @@
 #SBATCH --mem=8gb                     # Job memory request (per node)
 #SBATCH --time=72:00:00               # Time limit hrs:min:sec
 #SBATCH --array=1-24
-#SBATCH -o ../../data/future_roots_logs/%A_%a.out
+#SBATCH -o /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/future_roots_logs/%A_%a.out
 # %A" is replaced by the job ID and "%a" with the array index
-#SBATCH -e ../../data/future_roots_logs/%A_%a.err
+#SBATCH -e /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/future_roots_logs/%A_%a.err
 #SBATCH --partition celltypes         # Partition used for processing
 
-source conda activate cv
-python future_roots.py $SLURM_ARRAY_TASK_ID
+conda run -n train python -m auto_proof.code.pre.future_roots -c $SLURM_ARRAY_TASK_ID

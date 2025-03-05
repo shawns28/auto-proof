@@ -16,11 +16,12 @@ class AutoProofDataset(Dataset):
     def __init__(self, config, mode):
         self.config = config
         # 'root' is all, 'train', 'val', 'test'
-        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])[:6000]
+        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
-        self.num_shards = config['data']['num_shards']
+        # self.num_shards = config['data']['num_shards']
         self.features_dir = config['data']['features_dir']
+        self.map_pe_dir = config['data']['map_pe_dir']
         # self.shard_features = config['data']['shard_features']
         # self.features_sharded_dir = config['data']['features_sharded_dir']
 
@@ -48,12 +49,13 @@ class AutoProofDataset(Dataset):
     def __getitem__(self, index):
         root = self.roots[index]
         data_path = f'{self.features_dir}{root}.hdf5'
+        map_pe_path = f'{self.map_pe_dir}map_{root}.hdf5'
         # NOTE: Sharded features don't have proofread roots in them
         # if self.shard_features: 
         #     shard_id = hash_shard(root, self.num_shards)
         #     data_path = f'{self.features_sharded_dir}{shard_id}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as shard_file:
+            with h5py.File(data_path, 'r') as shard_file, h5py.File(map_pe_path, 'r') as map_pe_file:
                 f = shard_file
                 # if self.shard_features:
                 #     f = shard_file[str(root)]
@@ -61,13 +63,15 @@ class AutoProofDataset(Dataset):
                 # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 # compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
                 radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
-                pos_enc = torch.from_numpy(f['pos_enc'][:])
                 labels = torch.from_numpy(f['label'][:])
                 # print("original labels", labels)
                 confidence = torch.from_numpy(f['confidence'][:])
                 # print("num_initial_vertices", f['num_initial_vertices'][()])
                 labels = labels.unsqueeze(1).int()
                 confidence = confidence.unsqueeze(1).int()
+
+                pos_enc = torch.from_numpy(map_pe_file['map_pe'][:])
+                # pos_enc = torch.from_numpy(f['pos_enc'][:])
 
                 # If doing the default features, need to set confidence to 1 where labels are 0
                 # if not self.shard_features:
@@ -112,7 +116,7 @@ class AutoProofDataset(Dataset):
 #     shard_id = hash_value % num_shards
 #     return shard_id
 
-# 0.002 sec but double count diagonal
+# 0.002 sec but double count diagonal so don't use
 def edge_list_to_adjency_numpy(edges, size):
     adj = np.zeros((size, size))
     edges_x = edges[:, 0]
@@ -159,9 +163,6 @@ def build_dataloader(config, dataset, run, mode):
     shuffle = False
 
     if mode == 'root' or mode == 'train':
-        run["parameters/loader/num_workers"] = num_workers
-        print("num workers", num_workers)
-        print("batch size" , batch_size)
         shuffle = True
 
     prefetch_factor = config['loader']['prefetch_factor']

@@ -32,8 +32,8 @@ def create_labels(config, success_labels_dir):
     else: # No chunking
         num_chunks = 1
 
-    root_ids = data_utils.load_txt(config['data']['root_path'])
-    root_ids = data_utils.get_roots_chunk(config, root_ids, chunk_num=chunk_num, num_chunks=num_chunks)
+    roots = data_utils.load_txt(config['data']['root_path'])
+    roots = data_utils.get_roots_chunk(config, roots, chunk_num=chunk_num, num_chunks=num_chunks)
 
     if not os.path.isdir(success_labels_dir):
         os.makedirs(success_labels_dir)

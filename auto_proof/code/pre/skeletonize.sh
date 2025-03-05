@@ -10,5 +10,4 @@
 #SBATCH -e /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/skeletonize_logs/%A_%a.err
 #SBATCH --partition celltypes         # Partition used for processing
 
-source conda activate exp
-python -m auto_proof.code.pre.skeletonize -c $SLURM_ARRAY_TASK_ID
+conda run -n exp python -m auto_proof.code.pre.skeletonize -c $SLURM_ARRAY_TASK_ID

@@ -106,3 +106,19 @@ def get_roots_chunk(config, root_ids, chunk_num, num_chunks):
     else:
         root_ids = root_ids[start_index:end_index]
     return root_ids
+
+'''
+Compares the roots from before and after and saves the different roots
+Inputs:
+    before_path
+    after_path
+    diff_path
+'''
+def compare_roots(before_path, after_path, diff_path):
+    # Comparing the roots after the operation to before
+    before_op = load_txt(before_path)
+    after_op = load_txt(after_path)
+    diff = np.setdiff1d(before_op, after_op)
+    print("different: ", len(diff))
+    if len(diff) > 0:
+        save_txt(diff_path, diff)
