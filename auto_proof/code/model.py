@@ -170,54 +170,33 @@ class GraphTransformer(nn.Module):
 
         x = self.projector(x)
 
-        # Softmax, cross entropy already does that
-        # sigmoid = nn.Sigmoid()
-        # x = sigmoid(x)
-
         return x
 
-    def compute_loss(self, output, labels, confidences, class_weights):
-        mask = labels != -1
-        mask = mask.squeeze(-1)
-        output = output[mask]
-        labels = labels[mask]
-        confidences = confidences[mask]
-        # torch.set_printoptions(profile="full")
+    def compute_loss(self, output, labels, confidences, dist_to_error, max_dist, class_weight, conf_weight):
+        mask = labels != -1 # (b, fov, 1)
+        mask = mask.squeeze(-1) # (b, fov)
 
-        # print("output", output)
-        output = output
-        labels = labels.squeeze(-1).long()
-        confidences = confidences.squeeze(-1)
-        # print("labels", labels)
-        # Think about doing cross entropy instead with 2 classes and weights
+        output = output[mask] # (b * fov - buffer, 1)
+        labels = labels[mask] # (b * fov - buffer, 1)
         
-        loss_function = nn.CrossEntropyLoss(reduction='none', weight=class_weights)
+        confidences = confidences[mask] # (b * fov - buffer, 1)
+
+        # Create a tolerance around labeled errors
+        # There might be situations where we ignore spots where there are no errors nearby due to fov cutoff
+        dist_to_error = dist_to_error[mask]
+        # dist_to_error = dist_to_error.squeeze(-1)
+        dist_mask = torch.logical_or(dist_to_error == 0, dist_to_error > max_dist)
+        dist_mask = dist_mask.squeeze(-1) # (b * fov - buffer)
+
+        output = output[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
+        labels = labels[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
+        confidences = confidences[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
+        
+        loss_function = nn.BCEWithLogitsLoss(reduction='none', pos_weight=class_weight)
         losses = loss_function(output, labels)
 
-        # print("losses", losses)
+        conf_mask = confidences == 0 # (b * fov - buffer - tolerance)
 
-        # This is wrong but I need to fix it for focal loss
-        # probs = output[labels]
-        # print("probs size", probs.shape)
-        # print("probs", probs)
-
-        # loss_function = nn.BCELoss(reduction='none')
-        # losses = loss_function(output, labels)
-
-        # Should add to config
-        # non_merge_weight = 0.1
-        # # non_merge_mask = (output >= 0.5) & (labels == 1)
-        # non_merge_mask = labels == 1
-        # losses[non_merge_mask] *= non_merge_weight
-
-        # This is currently going to stack but its for confidence weighting
-        
-        # This also seems to be wrong right now so lets just ignore it for now
-        conf_weight = 0.5
-        conf_mask = confidences == 0
-        # print("labels", labels)
-        # print("confis", confidences.long())
-        # print("conf mask", conf_mask)
         losses[conf_mask] *= conf_weight
 
         # print("losses post confidence", losses)

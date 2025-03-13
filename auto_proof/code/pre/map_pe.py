@@ -10,7 +10,6 @@ import json
 import sys
 import time
 import argparse
-from scipy import sparse as sp
 import torch
 import multiprocessing
 import glob
@@ -21,7 +20,7 @@ Creates Maximal Axis Projection (MAP) Positional Encodings
 Copied from, make sure to cite:
 https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
 '''
-def create_map_pe(config, map_pes_dir, freq):
+def create_map_pe(config, map_pes_dir):
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--chunk_num", help="chunk num")
     parser.add_argument("-n", "--num_workers", help="num workers")
@@ -73,7 +72,7 @@ def process_root(args):
         with h5py.File(root_feat_path, 'r') as f:
             edges = f['edges'][:]
             g = gt.Graph(edges, directed=False)
-            map_pe = map_positional_encoding(g, map_pes_dir, freq, True, True, True)
+            map_pe = map_positional_encoding(g, True, True, True)
             # print("map pe:", map_pe)
             # print("map pe shape", map_pe.shape)
             
@@ -83,11 +82,12 @@ def process_root(args):
         return
 
 # There are different versions of the normalized adjency matrix that I could use
-def map_positional_encoding(g, map_pes_dir, freq, use_unique_sign=True, use_unique_basis=True, use_eig_val=True):
+def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True):
     pos_enc_dim = config['data']['pos_enc_dim']
     
     A = gt.adjacency(g).astype(np.double)
     A = torch.from_numpy(A.toarray()).double()
+    # print("A", A)
     A = normalize_adjacency(A)
     # A = np.array([[0, 1, 0, 1],
     #               [1, 0, 1, 0],
@@ -95,7 +95,7 @@ def map_positional_encoding(g, map_pes_dir, freq, use_unique_sign=True, use_uniq
     #               [1, 0, 1, 0]]).astype(np.double)
     # A = gt.laplacian(g, norm=True)
     # A = torch.from_numpy(A.toarray()).double()
-    # print("A", A)
+    # print("A normalized", A)
     n, k = A.shape[0], pos_enc_dim
     E, U = torch.linalg.eigh(A)
     E = E.round(decimals=14)
@@ -106,20 +106,21 @@ def map_positional_encoding(g, map_pes_dir, freq, use_unique_sign=True, use_uniq
     _, mult = torch.unique(E[-dim:], return_counts=True)
     # print("mult", mult)
     ind = torch.cat([torch.LongTensor([0]), torch.cumsum(mult, dim=0)])
-
-    if freq == 'high':
-        ind += max(n - k, 0)
+    
+    # If freq == 'high'
+    ind += max(n - k, 0)
     # To do the freq low thing we need to do more stuff
     # if freq == 'low':
     #     ind += 1
     # print("ind", ind)
-    if unique_sign:
+    if use_unique_sign:
+        # print("entering use_unique_sign")
         for i in range(mult.shape[0]):
             if mult[i] == 1:
                 U[:, ind[i]:ind[i + 1]] = unique_sign(U[:, ind[i]:ind[i + 1]])  # eliminate sign ambiguity
     # print("U after sign", U)
-    if unique_basis:
-        # print("mult shape", mult)
+    if use_unique_basis:
+        # print("entering use_unique_basis")
         for i in range(mult.shape[0]):
             if mult[i] == 1:
                 continue  # single eigenvector, no basis ambiguity
@@ -135,11 +136,11 @@ def map_positional_encoding(g, map_pes_dir, freq, use_unique_sign=True, use_uniq
     if n < k:
         zeros = torch.zeros([n, k - n])
         U = torch.cat([U, zeros], dim=-1)
-    #print("U at the end", U)
+    # print("U at the end", U)
     # print("U shape before taking last k eigenvectors", U.shape)
-    if freq == 'high':
+    # if freq == 'high':
         # print('high')
-        pos_enc = U[:, -k:]  # last k eigenvectors
+    pos_enc = U[:, -k:]  # last k eigenvectors
     # elif freq == 'low':
     #     print('low')
     #     pos_enc = U[:, 1:k+1] # first k eigenvectors except first
@@ -315,7 +316,7 @@ def orthogonalize(U):
     Q, R = torch.linalg.qr(U)
     return Q
 
-def save_map_pe_roots(config, map_pes_dir, post_map_pes_roots_file):
+def save_map_pe_roots(map_pes_dir, post_map_pes_roots_file):
     files = glob.glob(f'{map_pes_dir}*')
     roots = [files[i][-23:-5] for i in range(len(files))]
     print(roots[0])
@@ -323,13 +324,13 @@ def save_map_pe_roots(config, map_pes_dir, post_map_pes_roots_file):
 
 if __name__ == "__main__":
     config = data_utils.get_config()
-    map_pes_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes/"
-    freq = 'high'
+    map_pes_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes2/"
+    # freq = 'high'
     print("creating map pes")
-    create_map_pe(config, map_pes_dir, freq)
+    create_map_pe(config, map_pes_dir)
 
     post_map_pes_roots_file = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_map_pe_roots.txt"
-    save_map_pe_roots(config, map_pes_dir, post_map_pes_roots_file)
+    save_map_pe_roots(map_pes_dir, post_map_pes_roots_file)
 
     diff_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/missing_map_pe_roots.txt'
     data_utils.compare_roots(config['data']['root_path'], post_map_pes_roots_file, diff_path)

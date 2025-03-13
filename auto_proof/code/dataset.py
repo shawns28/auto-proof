@@ -22,6 +22,7 @@ class AutoProofDataset(Dataset):
         # self.num_shards = config['data']['num_shards']
         self.features_dir = config['data']['features_dir']
         self.map_pe_dir = config['data']['map_pe_dir']
+        self.dist_dir = config['data']['dist_dir']
         # self.shard_features = config['data']['shard_features']
         # self.features_sharded_dir = config['data']['features_sharded_dir']
 
@@ -50,12 +51,13 @@ class AutoProofDataset(Dataset):
         root = self.roots[index]
         data_path = f'{self.features_dir}{root}.hdf5'
         map_pe_path = f'{self.map_pe_dir}map_{root}.hdf5'
+        dist_path = f'{self.dist_dir}dist_{root}.hdf5'
         # NOTE: Sharded features don't have proofread roots in them
         # if self.shard_features: 
         #     shard_id = hash_shard(root, self.num_shards)
         #     data_path = f'{self.features_sharded_dir}{shard_id}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as shard_file, h5py.File(map_pe_path, 'r') as map_pe_file:
+            with h5py.File(data_path, 'r') as shard_file, h5py.File(map_pe_path, 'r') as map_pe_file, h5py.File(dist_path, 'r') as dist_file:
                 f = shard_file
                 # if self.shard_features:
                 #     f = shard_file[str(root)]
@@ -81,6 +83,8 @@ class AutoProofDataset(Dataset):
                 rank_num = f'rank_{self.seed_index}'
                 rank = torch.from_numpy(f[rank_num][:])
 
+                dist_to_error = torch.from_numpy(dist_file['dist'][:]).unsqueeze(1)
+
                 size = len(vertices)
 
                 # Currently concatenating the pos enc to node features
@@ -97,18 +101,20 @@ class AutoProofDataset(Dataset):
                     input = input[indices]
                     labels = labels[indices]
                     confidence = confidence[indices]
+                    dist_to_error = dist_to_error[indices]
                     edges = prune_edges(edges, indices)
                 elif(size < self.fov):
                     input = torch.cat((input, torch.zeros((self.fov - size, input.shape[1]))), dim=0)
                     labels = torch.cat((labels, torch.full((self.fov - size, 1), -1)))
                     confidence = torch.cat((confidence, torch.full((self.fov - size, 1), -1)))
+                    dist_to_error = torch.cat((dist_to_error, torch.full((self.fov - size, 1), -1)))
 
-                adj = edge_list_to_adjency(edges, self.fov)
+                adj = edge_list_to_adjency(edges, size, self.fov)
         except Exception as e:
             print("root: ", root, "error: ", e)
             return None
             
-        return input, labels, confidence, adj
+        return input, labels, confidence, dist_to_error, adj
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)
@@ -116,34 +122,34 @@ class AutoProofDataset(Dataset):
 #     shard_id = hash_value % num_shards
 #     return shard_id
 
-# 0.002 sec but double count diagonal so don't use
-def edge_list_to_adjency_numpy(edges, size):
-    adj = np.zeros((size, size))
-    edges_x = edges[:, 0]
-    edges_y = edges[:, 1]
-    np.add.at(adj, (edges_x, edges_y), 1)
-    np.add.at(adj, (edges_y, edges_x), 1)
-    np.add.at(adj, (edges_x, edges_x), 1)
-    np.add.at(adj, (edges_y, edges_y), 1)
+# Always adds in diagonals as self edges/loops
+def edge_list_to_adjency(edges, size, fov):
+    adj = torch.zeros((fov, fov))
+    adj[edges[:, 0], edges[:, 1]] = 1
+    adj[edges[:, 1], edges[:, 0]] = 1
+    for i in range(min(size, fov)):
+        adj[i, i] = 1
     return adj
 
-# 0.003 sec
-def edge_list_to_adjency(edges, size):
-    adj = torch.zeros((size, size))
-    for edge in edges:
-        adj[edge[0]][edge[1]] = 1
-        adj[edge[1]][edge[0]] = 1
-        adj[edge[0]][edge[0]] = 1
-        adj[edge[1]][edge[1]] = 1
-    return adj
+# Skips edge pairs for diagonals
+def adjency_to_edge_list_torch_skip_diag(adj):
+    rows, cols = torch.where(adj != 0)
+    edges = torch.stack((rows, cols), dim=1)
 
-def adjency_to_edge_list(adj):
-    edge_list = []
-    for i in range(adj.shape[0]):
-        for j in range(adj.shape[1]):
-            if j >= i and adj[i][j] != 0:
-                edge_list.append((i, j))
-    return edge_list
+    # Removes diagonals and duplicates since adj is undirected
+    mask = edges[:, 0] < edges[:, 1]
+    edges_upper = edges[mask]
+    return edges_upper
+
+# Skips edge pairs for diagonals
+def adjency_to_edge_list_numpy_skip_diag(adj):
+    rows, cols = np.where(adj != 0)
+    edges = np.column_stack((rows, cols))
+
+    # Removes diagonals and duplicates since adj is undirected
+    mask = edges[:, 0] < edges[:, 1]
+    edges_upper = edges[mask]
+    return edges_upper
 
 # adapted from skeletonize.py
 def prune_edges(edges, indices):

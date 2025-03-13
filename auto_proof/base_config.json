@@ -1,6 +1,6 @@
 {
     "model": {
-        "num_classes": 2,
+        "num_classes": 1,
         "dim": 32,
         "depth": 7,
         "n_head": 8
@@ -9,6 +9,7 @@
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/",
         "features_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
         "map_pe_dir":  "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes/",
+        "dist_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/dist/",
         "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023.txt",
         "train_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/train_roots_369502_913.txt",
         "val_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/val_roots_45333_69.txt",
@@ -31,7 +32,7 @@
         "prefetch_factor": 0,
         "batch_size": 32,
         "seed_index": 1,
-        "fov": 500,
+        "fov": 250,
         "feat_dim": 36
     },
     "trainer": {
@@ -39,7 +40,10 @@
         "save_ckpt_every": 1,
         "visualize_rand_num": 0,
         "visualize_cutoff": 4000,
-        "class_weights": 9
+        "save_visual_every": 5,
+        "class_weights": 0.01,
+        "conf_weight": 0.1,
+        "max_dist": 2
     },
     "optimizer": {
         "epochs": 75,
