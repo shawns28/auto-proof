@@ -87,7 +87,7 @@ def process_root(args):
             error_count = len(np.where(labels == 0)[0])
             conf_count = len(np.where(confidence == 1)[0])
             node_count = min(fov, size)
-            
+
             # if abs(error_count - conf_count) == 1:
             #     print("c", conf_count, "e", error_count, "n", node_count, "root", root)
 
@@ -120,5 +120,6 @@ def process_root(args):
 if __name__ == "__main__":
     config = data_utils.get_config()
     config['data']['map_pe_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes2/"
+    config['loader']['fov'] = 128
     test(config)
     

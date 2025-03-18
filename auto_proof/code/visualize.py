@@ -1,6 +1,7 @@
 from auto_proof.code.dataset import AutoProofDataset, adjency_to_edge_list_torch_skip_diag
 from auto_proof.code.pre import data_utils
 from auto_proof.code.model import create_model
+from auto_proof.code.utils import get_root_output
 
 import torch
 import torch.nn as nn
@@ -11,58 +12,6 @@ import numpy as np
 from tqdm import tqdm
 import multiprocessing
 # Remember to remove morphlink package that already exists in directory
-
-def get_root_output(model, device, data, root):
-    model.eval() # Marking this here due to async
-    with torch.no_grad(): # Marking this here due to async
-        # For now it's just pulling a specific sample, later this will pull a specific sample in train/val/test
-        # model.to(device)
-        idx = data.get_root_index(root)
-        sample = data.__getitem__(idx)
-        input, labels, confidence, dist_to_error, adj = sample 
-        input = input.float().to(device).unsqueeze(0) # (1, fov, d)
-        labels = labels.float().to(device) # (fov, 1)
-        confidence = confidence.float().to(device) # (fov, 1)
-        adj = adj.float().to(device).unsqueeze(0) # (1, fov, fov)
-        dist_to_error = dist_to_error.float().to(device) # (fov, 1)
-
-        output = model(input, adj) # (1, fov, 1)
-        sigmoid = nn.Sigmoid()
-        output = sigmoid(output) # (1, fov, 1)
-        output = output.squeeze(0) # (fov, 1)
-
-        # original represents the original points that weren't buffered
-        mask = labels != -1
-        mask = mask.squeeze(-1) # (original)
-        
-        # Apply mask to get original points
-        output = output[mask] # (original, 1)
-        input = input.squeeze(0)[mask] # (original, d)
-        labels = labels[mask] # (original, 1)
-        confidence = confidence[mask] # (original, 1)
-        adj = adj.squeeze(0)[mask, :][:, mask] # (original, original)
-        dist_to_error = dist_to_error[mask] # (original, 1)
-
-        # Vertices is always first in the input
-        vertices = input[:, :3]
-        edges = adjency_to_edge_list_torch_skip_diag(adj)
-
-        config = data_utils.get_config()
-        client, _, _ = data_utils.create_client(config)  
-        cv = client.info.segmentation_cloudvolume(progress=False)
-        mesh = cv.mesh.get(
-            root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False
-        )[root]
-        # seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
-        # cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
-        # mesh = cv_seg.mesh.get(root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=True)[root]
-        
-        root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
-
-        is_proofread = data.get_is_proofread(root)
-        num_initial_vertices = data.get_num_initial_vertices(root)
-
-    return vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error
 
 # Not detaching here because it causes weird error where it wants it to 
 def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, path):
@@ -161,7 +110,7 @@ def visualize_root(stuff):
 
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
-    run_id = 'AUT-210'
+    run_id = 'AUT-215'
     run_dir = f'{ckpt_dir}{run_id}/'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
@@ -173,7 +122,7 @@ if __name__ == "__main__":
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20241104_132019/model_29'
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250212_125759/model_1.pt'
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250215_212005/model_34.pt'
-    ckpt_path = f'{run_dir}model_74.pt'
+    ckpt_path = f'{run_dir}model_55.pt'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict)
@@ -188,9 +137,9 @@ if __name__ == "__main__":
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135937424949]
-    # roots = [864691135463333789]
+    roots = [864691135463333789]
     # Roots that are sus because conf and error are similar but not exact
-    roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
+    # roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
     max_dist = config['trainer']['max_dist']
     # stuff = [(model, device, data, 864691135463333789), (model, device, data, 864691135778235581), (model, device, data, 864691135463333789), (model, device, data, 864691135778235581)]
     # num_processes = len(stuff)
@@ -200,7 +149,7 @@ if __name__ == "__main__":
 
     for root in roots:
         # try:
-        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt46_250_fov.html'
+        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt55_250_fov.html'
         vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_intitial_vertices, dist_to_error = get_root_output(model, device, data, root)
         print("is_proofread", is_proofread)
         print("num_intitial_vertice", num_intitial_vertices)

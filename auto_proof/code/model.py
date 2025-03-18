@@ -172,31 +172,25 @@ class GraphTransformer(nn.Module):
 
         return x
 
-    def compute_loss(self, output, labels, confidences, dist_to_error, max_dist, class_weight, conf_weight):
+    def compute_loss(self, output, labels, confidences, dist_to_error, max_dist, class_weight, conf_weight, tolerance_weight):
         mask = labels != -1 # (b, fov, 1)
         mask = mask.squeeze(-1) # (b, fov)
 
-        output = output[mask] # (b * fov - buffer, 1)
-        labels = labels[mask] # (b * fov - buffer, 1)
+        output = output[mask].squeeze(-1) # (b * fov - buffer,)
+        labels = labels[mask].squeeze(-1) # (b * fov - buffer,)
         
-        confidences = confidences[mask] # (b * fov - buffer, 1)
-
-        # Create a tolerance around labeled errors
-        # There might be situations where we ignore spots where there are no errors nearby due to fov cutoff
-        dist_to_error = dist_to_error[mask]
-        # dist_to_error = dist_to_error.squeeze(-1)
-        dist_mask = torch.logical_or(dist_to_error == 0, dist_to_error > max_dist)
-        dist_mask = dist_mask.squeeze(-1) # (b * fov - buffer)
-
-        output = output[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
-        labels = labels[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
-        confidences = confidences[dist_mask].squeeze(-1) # (b * fov - buffer - tolerance)
+        confidences = confidences[mask].squeeze(-1) # (b * fov - buffer,)
+        dist_to_error = dist_to_error[mask].squeeze(-1) # (b * fov - buffer,)
         
         loss_function = nn.BCEWithLogitsLoss(reduction='none', pos_weight=class_weight)
         losses = loss_function(output, labels)
 
-        conf_mask = confidences == 0 # (b * fov - buffer - tolerance)
+        # Create a tolerance around labeled errors
+        # There might be situations where we ignore spots where there are no errors nearby due to fov cutoff
+        dist_mask = torch.logical_and(dist_to_error >= 0, dist_to_error <= max_dist)
+        losses[dist_mask] *= tolerance_weight
 
+        conf_mask = confidences == 0 # (b * fov - buffer - tolerance)
         losses[conf_mask] *= conf_weight
 
         # print("losses post confidence", losses)

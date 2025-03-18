@@ -43,7 +43,10 @@
         "save_visual_every": 5,
         "class_weights": 0.01,
         "conf_weight": 0.1,
-        "max_dist": 2
+        "tolerance_weight": 0.1,
+        "max_dist": 2,
+        "max_cloud": 15,
+        "thresholds": [0.5]
     },
     "optimizer": {
         "epochs": 75,

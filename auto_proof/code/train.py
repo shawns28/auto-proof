@@ -1,5 +1,6 @@
 from auto_proof.code.dataset import build_dataloader
-from auto_proof.code.visualize import get_root_output, visualize
+from auto_proof.code.visualize import visualize
+from auto_proof.code.utils import get_root_output
 
 import os
 import torch
@@ -45,6 +46,7 @@ class Trainer(object):
 
         self.class_weights = torch.tensor(config['trainer']['class_weights']).float().to(self.device)
         self.conf_weight = config['trainer']['conf_weight']
+        self.tolerance_weight = config['trainer']['tolerance_weight']
 
         ### trainings params
         self.epochs = config['optimizer']['epochs']
@@ -115,10 +117,9 @@ class Trainer(object):
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
                 input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
-                # self.model.train() # Marking this here due to async
 
                 output = self.model(input, adj)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight)
+                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
                 # self.run["train/loss"].append(loss)
 
                 # optimize 
@@ -155,7 +156,7 @@ class Trainer(object):
                 # input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
                 output = self.model(input, adj) # (b, fov, 1)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight)
+                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
                 self.run["val/loss"].append(loss)
                 running_vloss += loss
 
