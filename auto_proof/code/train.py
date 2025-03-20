@@ -1,6 +1,7 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import visualize
 from auto_proof.code.utils import get_root_output
+from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader
 
 import os
 import torch
@@ -116,7 +117,7 @@ class Trainer(object):
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-                input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
+                _ , input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
@@ -151,10 +152,18 @@ class Trainer(object):
         total_output_conf = torch.zeros(1).to(self.device)
         total_labels_conf = torch.zeros(1).to(self.device)
 
+        root_to_output = {}
+
         with tqdm(total=self.val_size / self.batch_size, desc="val") as pbar:
             for i, data in enumerate(self.val_loader):
-                # input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-                input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
+                # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
+                roots, input, labels, confidence, dist_to_error, adj = data
+                # TODO: Only send input and adj to device and make everything later numpy to make things faster?
+                input = input.float().to(self.device)
+                labels = labels.float().to(self.device)
+                confidence = confidence.float().to(self.device)
+                dist_to_error = dist_to_error.float().to(self.device)
+                adj = adj.float().to(self.device)
                 output = self.model(input, adj) # (b, fov, 1)
                 loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
                 self.run["val/loss"].append(loss)
@@ -186,7 +195,41 @@ class Trainer(object):
                 total_output_conf = torch.cat((total_output_conf, output_conf), dim=0)
                 total_labels_conf = torch.cat((total_labels_conf, labels_conf), dim=0)
 
+                output = output.detach().cpu().numpy()
+                roots = roots.detach().cpu().numpy().astype(int)
+                # TODO: See if this works
+                for i in range(len(roots)):
+                    root_to_output[roots[i]] = output[i][mask[i]]
+
                 pbar.update()
+
+        is_confident = False
+        print("creating obj det dataset")
+        obj_det_data_all = ObjectDetectionDataset(self.config, root_to_output, is_confident)
+        obj_det_loader_all = obj_det_dataloader(self.config, obj_det_data_all, 'val')
+
+        with tqdm(total=len(obj_det_data_all) / self.batch_size, desc="obj det all") as pbar:
+            for i, data in enumerate(obj_det_loader_all):
+                pbar.update()
+        
+        all_metrics_dict = obj_det_data_all.__getmetrics__()
+        print("all metrics at threshold 0.5", all_metrics_dict[0.5])
+
+        self.obj_plot(all_metrics_dict, 'all')
+
+        is_confident = True
+        print("creating obj det dataset for confident")
+        obj_det_data_conf = ObjectDetectionDataset(self.config, root_to_output, is_confident)
+        obj_det_loader_conf = obj_det_dataloader(self.config, obj_det_data_conf, 'val')
+
+        with tqdm(total=len(obj_det_data_conf) / self.batch_size, desc="obj det conf") as pbar:
+            for i, data in enumerate(obj_det_loader_conf):
+                pbar.update()
+        
+        conf_metrics_dict = obj_det_data_conf.__getmetrics__()
+        print("conf metrics at threshold 0.5", conf_metrics_dict[0.5])
+
+        self.obj_plot(conf_metrics_dict, 'confident')
 
         # Taking out the initial 0 from initialization
         total_labels = total_labels.cpu().detach().numpy()[1:]
@@ -198,6 +241,47 @@ class Trainer(object):
         self.pinned_plot(total_labels_conf, total_output_conf, recall_targets, 'confident')
         
         return running_vloss / (self.val_size / self.batch_size)
+
+    def obj_plot(self, metrics_dict, mode):
+        plt.figure(figsize=(8, 8))
+        thresholds = self.config['trainer']['thresholds']
+        recalls = []
+        precisions = []
+        for i in range(len(thresholds)):
+            threshold = thresholds[i]
+            # Using label tp instead of output tp for now
+            precision, recall = self.get_precision_and_recall(metrics_dict[threshold]['label_tp'], metrics_dict[threshold]['fn'], metrics_dict[threshold]['fp'])
+            precisions.append(precision)
+            recalls.append(recall)
+
+        plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
+        plt.xlabel('Recall', fontsize=14)
+        plt.ylabel('Precision', fontsize=14)
+        if mode == 'all':
+            plt.title('Merge Error Object Based Precision-Recall Curve for All Nodes')
+        else:
+            plt.title('Merge Error Object Based Precision-Recall Curve for Confident Nodes')
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+
+        for i in range(len(thresholds)):
+            plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
+        plt.legend()
+        plt.grid(True)
+        save_path = f'{self.save_dir}obj_precision_recall_{mode}_{self.epoch}.png'
+        plt.savefig(save_path)
+        self.run[f"plots/obj_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
+
+    def get_precision_and_recall(self, tp, fn, fp):
+        precision = 0
+        if (tp + fp > 0):
+            precision = tp / (tp + fp)
+        recall = 0
+        if (tp + fn > 0):
+            recall = tp / (tp + fn)
+        return precision, recall
 
     def pinned_plot(self, total_labels, total_output, recall_targets, mode):
         # Flipping the labels to make merge errors 1 for scikit-learn precision recall curve
@@ -226,9 +310,9 @@ class Trainer(object):
         
         plt.legend()
         plt.grid(True)
-        save_path = f'{self.save_dir}precision_recall_{mode}_{self.epoch}.png'
+        save_path = f'{self.save_dir}node_precision_recall_{mode}_{self.epoch}.png'
         plt.savefig(save_path)
-        self.run[f"pinned/{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
+        self.run[f"plots/node_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
 
     def find_pinned_recall(self, precision_curve, recall_curve, threshold_curve, target_recall):
         pinned_idx = np.argmin(np.abs(recall_curve - target_recall))

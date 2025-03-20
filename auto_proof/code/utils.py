@@ -16,7 +16,7 @@ def get_root_output(model, device, data, root):
         # model.to(device)
         idx = data.get_root_index(root)
         sample = data.__getitem__(idx)
-        input, labels, confidence, dist_to_error, adj = sample 
+        _ , input, labels, confidence, dist_to_error, adj = sample 
         input = input.float().to(device).unsqueeze(0) # (1, fov, d)
         labels = labels.float().to(device) # (fov, 1)
         confidence = confidence.float().to(device) # (fov, 1)

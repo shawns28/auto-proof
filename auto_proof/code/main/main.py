@@ -35,6 +35,7 @@ def main():
     )
 
     run["parameters"] = config
+    run["parameters"]["trainer"]["thresholds"] = str(config["trainer"]["thresholds"])
 
     print("Tatal num workers", config['loader']['num_workers'])
     print("Batch size" , config['loader']['batch_size'])

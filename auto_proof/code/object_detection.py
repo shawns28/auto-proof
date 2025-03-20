@@ -12,16 +12,16 @@ from torch.multiprocessing import Manager
 import networkx as nx
 import h5py
 from torch.utils.data import Dataset, DataLoader, random_split
+import time
 
 class ObjectDetectionDataset(Dataset):
-    def __init__(self, config, root_to_output, is_confident):
+    def __init__(self, config, root_to_output):
         self.config = config
 
         self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.features_dir = config['data']['features_dir']
         self.thresholds = config['trainer']['thresholds']
-        self.is_confident = is_confident
         self.max_cloud = config['trainer']['max_cloud']
 
         self.roots = list(root_to_output.keys())
@@ -29,7 +29,16 @@ class ObjectDetectionDataset(Dataset):
         self.root_to_output = self.manager.dict(root_to_output)
         self.threshold_to_metrics = self.manager.dict()
         for threshold in self.thresholds:
-            self.threshold_to_metrics[threshold] = self.manager.dict({'label_tp': 0, 'output_tp': 0, 'fn': 0, 'fp': 0})
+            self.threshold_to_metrics[threshold] = self.manager.dict({
+                'all_label_tp': 0,
+                'all_output_tp': 0, 
+                'all_fn': 0, 
+                'all_fp': 0, 
+                'conf_label_tp': 0,
+                'conf_output_tp': 0, 
+                'conf_fn': 0, 
+                'conf_fp': 0, 
+            })
 
     def __len__(self):
         return len(self.roots)
@@ -41,28 +50,29 @@ class ObjectDetectionDataset(Dataset):
         root = self.roots[index]
         output = self.root_to_output[root]
         data_path = f'{self.features_dir}{root}.hdf5'
+        file_before = time.time()
         try:
             with h5py.File(data_path, 'r') as f:
+                file_after = time.time()
+                print("file open time", file_after - file_before)
+                time_1 = time.time()
                 labels = f['label'][:]
                 confidence = f['confidence'][:]
 
-                # Not adding rank as a feature
                 rank_num = f'rank_{self.seed_index}'
                 rank = f[rank_num][:]
 
                 edges = f['edges'][:]
+                time_2 = time.time()
 
                 if len(labels) > self.fov:
                     indices = np.where(rank < self.fov)[0]
                     labels = labels[indices]
                     confidence = confidence[indices]
                     edges = prune_edges(edges, indices)
+                time_3 = time.time()
 
-                if is_confident:
-                    conf_indices = np.where(confidence == 1)[0]
-                    output = output[conf_indices]
-                    labels = labels[conf_indices]
-                    edges = prune_edges(edges, conf_indices)
+                assert(len(labels) == len(output))
 
                 threshold_to_output = {}
                 for threshold in self.thresholds:
@@ -71,128 +81,79 @@ class ObjectDetectionDataset(Dataset):
                 node_attributes = {}
                 for i in range(len(labels)):
                     node_attributes[i] = {'label': labels[i]}
+                    node_attributes[i]['confidence'] = confidence[i]
                     for threshold in self.thresholds:
                         node_attributes[i][str(threshold)] = threshold_to_output[threshold][i]
 
+                time_4 = time.time()
                 g = nx.Graph()
                 g.add_edges_from(edges)
                 g.add_nodes_from([(i, node_attributes[i]) for i in range(len(labels))])
+                time_5 = time.time()
 
-                print("first node", g.nodes[0])
-
-                print("original label error indices", np.where(labels == 0)[0])
-
-                label_components = connected_components_by_attribute(g, 'label')
-                label_components = [s for s in label_components if len(s) <= self.max_cloud]
-
-                for component in label_components:
-                    print("label component", component)
+                label_components, conf_label_components = connected_components_by_attribute(g, 'label')
+                time_6 = time.time()
+                label_components, label_components_removed = remove_big_clouds(label_components, self.max_cloud)
+                conf_label_components, _ = remove_big_clouds(conf_label_components, self.max_cloud)
+                if len(label_components_removed) > 0:
+                    print("Root has labeled component over max cloud", root)
+                time_7 = time.time()
 
                 for threshold in self.thresholds:
-                    print("treshold:", threshold)
 
-                    output_components = connected_components_by_attribute(g, str(threshold))
-                    output_components = [s for s in output_components if len(s) <= self.max_cloud]
-                
-                    # for component in output_components:
-                    #     print("output components", component)
+                    output_components, conf_output_components = connected_components_by_attribute(g, str(threshold))
+                    output_components, output_components_removed = remove_big_clouds(output_components, self.max_cloud)
+                    time_8 = time.time()
+                    new_conf_output_components = []
+                    for conf_output_component in conf_output_components:
+                        if conf_output_component.isdisjoint(output_components_removed):
+                            new_conf_output_components.append(conf_output_component)
+                    conf_output_components = new_conf_output_components
+                    time_9 = time.time()
+                    # if len(conf_output_components) > 0 and len(output_components_removed) > 0:
+                    #     conf_output_components = [[conf_output_component for conf_output_component in conf_output_components if conf_output_component.isdisjoint(output_components_removed)]]
 
-                    label_tp, fn = count_shared_and_unshared(label_components, output_components)
-                    output_tp, fp = count_shared_and_unshared(output_components, label_components)
-                    print("label_tp", label_tp)
-                    print("output_tp", output_tp)
-                    print("fn", fn)
-                    print("fp", fp)
-                    self.threshold_to_metrics[threshold]['label_tp'] += label_tp
-                    self.threshold_to_metrics[threshold]['output_tp'] += output_tp
-                    self.threshold_to_metrics[threshold]['fn'] += fn
-                    self.threshold_to_metrics[threshold]['fp'] += fp
-
+                    all_label_tp, all_fn = count_shared_and_unshared(label_components, output_components)
+                    all_output_tp, all_fp = count_shared_and_unshared(output_components, label_components)
+                    time_10 = time.time()
+                    conf_label_tp, conf_fn = count_shared_and_unshared(conf_label_components, conf_output_components)
+                    conf_output_tp, conf_fp = count_shared_and_unshared(conf_output_components, conf_label_components)
+                    time_11 = time.time()
+                    self.threshold_to_metrics[threshold]['all_label_tp'] += all_label_tp
+                    self.threshold_to_metrics[threshold]['all_output_tp'] += all_output_tp
+                    self.threshold_to_metrics[threshold]['all_fn'] += all_fn
+                    self.threshold_to_metrics[threshold]['all_fp'] += all_fp
+                    self.threshold_to_metrics[threshold]['conf_label_tp'] += conf_label_tp
+                    self.threshold_to_metrics[threshold]['conf_output_tp'] += conf_output_tp
+                    self.threshold_to_metrics[threshold]['conf_fn'] += conf_fn
+                    self.threshold_to_metrics[threshold]['conf_fp'] += conf_fp
+                    time_12 = time.time()
+            print("time 1", time_2 - time_1)
+            print("time 2", time_3 - time_2)
+            print("time 3", time_4 - time_3)
+            print("time 4", time_5 - time_4)
+            print("time 5", time_6 - time_5)
+            print("time 6", time_7 - time_6)
+            print("time 7", time_8 - time_7)
+            print("time 8", time_9 - time_8)
+            print("time 9", time_10 - time_9)
+            print("time 10", time_11 - time_10)
+            print("time 11", time_12 - time_11)
         except Exception as e:
             print("root: ", root, "error: ", e)
             return None
             
-        return 1
+        return 1 
 
-# def build_dataloader(config, dataset, run, mode):
-#     num_workers = config['loader']['num_workers']
-#     batch_size = config['loader']['batch_size']
-#     shuffle = False
-
-#     if mode == 'root' or mode == 'train':
-#         shuffle = True
-
-#     prefetch_factor = config['loader']['prefetch_factor']
-#     if prefetch_factor == 0:
-#         prefetch_factor = None
-    # Might need to not pin memory here
-#     return DataLoader(
-#             dataset=dataset,
-#             batch_size=batch_size, 
-#             shuffle=shuffle,
-#             num_workers=num_workers,
-#             pin_memory=True,
-#             persistent_workers=True,
-#             prefetch_factor=prefetch_factor)
-
-def object_detection(config, root, edges, labels, confidence, output, thresholds, is_confident):
-    edges = edges.detach().cpu().numpy()
-    labels = labels.detach().cpu().numpy().squeeze(-1)
-    confidence = confidence.detach().cpu().numpy().squeeze(-1)
-    output = output.detach().cpu().numpy().squeeze(-1)
-
-    # We would also need to prune here normally based off of the fov
-    # Normally we would be given a map from root to masked output or conf output
-
-    if is_confident:
-        conf_indices = np.where(confidence == 1)[0]
-        output = output[conf_indices]
-        labels = labels[conf_indices]
-        edges = prune_edges(edges, conf_indices)
-
-    threshold_to_output = {}
-    for threshold in thresholds:
-        threshold_to_output[threshold] = np.where(output < threshold, 0, 1)
-    
-    node_attributes = {}
-    for i in range(len(labels)):
-        node_attributes[i] = {'label': labels[i]}
-        for threshold in thresholds:
-            node_attributes[i][str(threshold)] = threshold_to_output[threshold][i]
-
-    max_cloud = config['trainer']['max_cloud']
-    # max_cloud = 6
-
-    g = nx.Graph()
-    g.add_edges_from(edges)
-    # g.add_nodes_from([(node_index, {'label': labels[node_index], 'output': output[node_index]}) for node_index in range(len(labels))])
-    g.add_nodes_from([(i, node_attributes[i]) for i in range(len(labels))])
-
-    print("first node", g.nodes[0])
-
-    print("original label error indices", np.where(labels == 0)[0])
-
-    label_components = connected_components_by_attribute(g, 'label')
-    label_components = [s for s in label_components if len(s) <= max_cloud]
-
-    for component in label_components:
-        print("label component", component)
-
-    for threshold in thresholds:
-        print("treshold:", threshold)
-
-        output_components = connected_components_by_attribute(g, str(threshold))
-        output_components = [s for s in output_components if len(s) <= max_cloud]
-    
-        # for component in output_components:
-        #     print("output components", component)
-
-        label_tp, fn = count_shared_and_unshared(label_components, output_components)
-        output_tp, fp = count_shared_and_unshared(output_components, label_components)
-        print("label_tp", label_tp)
-        print("output_tp", output_tp)
-        print("fn", fn)
-        print("fp", fp)
+def remove_big_clouds(components, max_cloud):
+    big_clouds = set()
+    filtered_components = []
+    for cc in components:
+        if len(cc) > max_cloud:
+            big_clouds.update(cc)
+        else:
+            filtered_components.append(cc)
+    return filtered_components, big_clouds
 
 def count_shared_and_unshared(list_of_sets1, list_of_sets2):
     shared = 0
@@ -200,7 +161,7 @@ def count_shared_and_unshared(list_of_sets1, list_of_sets2):
     for curr_set1 in list_of_sets1:
         not_shared = True
         for curr_set2 in list_of_sets2:
-            if curr_set1.intersection(curr_set2):
+            if not curr_set1.isdisjoint(curr_set2):
                 not_shared = False
                 shared += 1
                 break
@@ -210,11 +171,43 @@ def count_shared_and_unshared(list_of_sets1, list_of_sets2):
     return shared, unshared
 
 def connected_components_by_attribute(graph, attribute):
-    value = 0 # Represents error
-    subgraph_nodes = [node for node, data in graph.nodes(data=True) if data.get(attribute) == value]
+    error_value = 0 # Represents error
+    subgraph_nodes = [node for node, data in graph.nodes(data=True) if data.get(attribute) == error_value]
     subgraph = graph.subgraph(subgraph_nodes)
     components = list(nx.connected_components(subgraph))
-    return components
+
+    # Confident points only
+    conf_value = 1
+    conf_subgraph_nodes = [node for node, data in subgraph.nodes(data=True) if data.get('confidence') == conf_value]
+    conf_subgraph = subgraph.subgraph(conf_subgraph_nodes)
+    conf_components = list(nx.connected_components(conf_subgraph))
+
+    return components, conf_components
+
+def obj_det_dataloader(config, dataset, mode):
+    num_workers = config['loader']['num_workers']
+    batch_size = config['loader']['batch_size']
+    shuffle = False
+    pin_memory = False # cpu only so don't need it
+    persistent_workers= False
+
+    if mode == 'root' or mode == 'train':
+        shuffle = True
+
+    prefetch_factor = config['loader']['prefetch_factor']
+    if prefetch_factor == 0:
+        prefetch_factor = None
+
+    # TODO: Depending on the speed we might have to randomly split the dataset in 1/2 or 1/3
+
+    return DataLoader(
+            dataset=dataset,
+            batch_size=batch_size, 
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor)
 
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
@@ -233,11 +226,11 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict)
     model.to(device)
 
-    # roots = [864691135463333789]
+    roots = [864691135463333789]
     # roots = [864691136379030485]
     # roots = [864691136443843459]
-    roots = [864691136443843459, 864691135463333789]
-    config['trainer']['thresholds'] = [0.5, 0.8]
+    # roots = [864691136443843459, 864691135463333789]
+    config['trainer']['thresholds'] = [0.99]
     config['trainer']['max_cloud'] = 15
 
     root_to_output = {}
@@ -246,8 +239,10 @@ if __name__ == "__main__":
         print("Getting root output")
         # Remember this doesn't pre mask so only use things above fov for testing right now
         vertices, edges, labels, confidence, output, _, _, _, _ = get_root_output(model, device, data, root)
-
+        detach_time = time.time()
         output = output.detach().cpu().numpy().squeeze(-1)
+        detach_post_time = time.time()
+        print("detach time", detach_post_time - detach_time)
         # print("Starting object detection")
         # object_detection(config, root, edges, labels, confidence, output, thresholds, False)
 
@@ -255,12 +250,16 @@ if __name__ == "__main__":
 
     config['loader']['batch_size'] = 1
     config['loader']['num_workers'] = 1
-    is_confident = False
     print("creating dataset")
-    obj_det_data = ObjectDetectionDataset(config, root_to_output, is_confident)
-
-    print("getting item")
-    obj_det_data.__getitem__(0)
-    obj_det_data.__getitem__(1)
-    print("metrics at threshold 0.5", obj_det_data.__getmetrics__()[0.5])
-    print("metrics at threshold 0.8", obj_det_data.__getmetrics__()[0.8])
+    obj_det_data = ObjectDetectionDataset(config, root_to_output)
+    obj_det_loader = obj_det_dataloader(config, obj_det_data, 'val')
+    before_loader = time.time()
+    with tqdm(total=len(obj_det_data) / config['loader']['batch_size'], desc="obj det all") as pbar:
+        for i, data in enumerate(obj_det_loader):
+            pbar.update()
+    after_loader = time.time()
+    print("loader total time", after_loader - before_loader)
+    
+    # print("metrics at threshold 0.5", obj_det_data.__getmetrics__()[0.5])
+    # print("metrics at threshold 0.8", obj_det_data.__getmetrics__()[0.8])
+    print("metrics at threshold 0.99", obj_det_data.__getmetrics__()[0.99])

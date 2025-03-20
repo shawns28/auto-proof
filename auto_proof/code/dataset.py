@@ -114,7 +114,7 @@ class AutoProofDataset(Dataset):
             print("root: ", root, "error: ", e)
             return None
             
-        return input, labels, confidence, dist_to_error, adj
+        return root, input, labels, confidence, dist_to_error, adj
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)

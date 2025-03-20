@@ -5,3 +5,4 @@ networkx
 pyvista[jupyter]
 trame
 trame-vtk
+gcsfs
