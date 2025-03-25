@@ -163,7 +163,7 @@ def prune_edges(edges, indices):
             edge_mask[i] = True
     return edges[edge_mask]
 
-def build_dataloader(config, dataset, run, mode):
+def build_dataloader(config, dataset, mode):
     num_workers = config['loader']['num_workers']
     batch_size = config['loader']['batch_size']
     shuffle = False

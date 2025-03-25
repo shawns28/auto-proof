@@ -115,7 +115,7 @@ if __name__ == "__main__":
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
 
-    data = AutoProofDataset(config, 'root')
+    data = AutoProofDataset(config, 'val')
     # config['model']['depth'] = 3
     # config['model']['n_head'] = 4
     model = create_model(config)
@@ -137,7 +137,11 @@ if __name__ == "__main__":
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135937424949]
-    roots = [864691135463333789]
+    # roots = [864691135463333789]
+    # roots = [864691135373853640, 864691135658276738, 864691135684548279, 864691135684548023, 864691135404040430, 864691135065359940, 864691135386905985, 864691135404090350, 864691135396807713, 864691135387767681, 864691135341705649, 864691135446000274, 864691135947108705, 864691135947108193, 864691135447045460, 864691135359346776, 864691135987462147]
+    # roots = [864691135684548279]
+    # roots = [864691135396807713]
+    roots = [864691135989085184, 864691135683792114, 864691136483519276, 864691135571609125, 864691135876419923, 864691136310246234, 864691136009015212, 864691135697685269, 864691136266911476]
     # Roots that are sus because conf and error are similar but not exact
     # roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
     max_dist = config['trainer']['max_dist']
@@ -146,14 +150,24 @@ if __name__ == "__main__":
     # with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(stuff)) as pbar:
     #     for root in pool.imap_unordered(visualize_root, stuff):
     #         pbar.update()
+    config['trainer']['visualize_cutoff'] = 4400
+    config['loader']['fov'] = 250
 
+           
+    # for i in range(10):
     for root in roots:
         # try:
-        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt55_250_fov.html'
-        vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_intitial_vertices, dist_to_error = get_root_output(model, device, data, root)
-        print("is_proofread", is_proofread)
-        print("num_intitial_vertice", num_intitial_vertices)
-        visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, path)
+        # root = data.get_random_root()
+        # while data.get_num_initial_vertices(root) > config['trainer']['visualize_cutoff']:
+        #     root = data.get_random_root()
+        num_initial_vertices = data.get_num_initial_vertices(root)
+        print("num_initial_vertice", num_initial_vertices, "for root", root)
+        if num_initial_vertices < config['trainer']['visualize_cutoff']:
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt55_250_fov.html'
+            print("getting root output")
+            vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
+            print("is_proofread", is_proofread)
+            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, path)
         # except Exception as e:
         #     print("Failed visualization for root id: ", root, "error: ", e)
         #     continue

@@ -10,7 +10,7 @@ import torch
 import time
 
 def test(config):
-    roots = data_utils.load_txt(config['data']['root_path'])
+    roots = data_utils.load_txt(config['data']['train_path'])
     # roots = [864691135937424949]
     # roots = [864691135778235581]
 
@@ -20,31 +20,42 @@ def test(config):
     print("fov", fov)
     features_dir = config['data']['features_dir']
     map_pe_dir = config['data']['map_pe_dir']
+    max_cloud = config['trainer']['max_cloud']
 
     # error_roots = []
     total_error_count = 0
     total_conf_count = 0
     total_node_count = 0
+    total_match_count = 0
+    total_error_match_count = 0
+    total_conf_smaller_than_cloud = 0
 
-    args_list = list([(root, features_dir, map_pe_dir, seed_index, fov) for root in roots])
+    args_list = list([(root, features_dir, map_pe_dir, seed_index, fov, max_cloud) for root in roots])
     num_processes = 32
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
-        for node_count, error_count, conf_count in pool.imap_unordered(process_root, args_list):
+        for node_count, error_count, conf_count, match_count, error_match_count, conf_smaller_than_cloud in pool.imap_unordered(process_root, args_list):
             # if root != 1111:
             #     error_roots.append(root)
             total_node_count += node_count
             total_error_count += error_count
             total_conf_count += conf_count
+            total_match_count += match_count
+            total_error_match_count += error_match_count
+            total_conf_smaller_than_cloud += conf_smaller_than_cloud
             pbar.update()
 
     print("total node count", total_node_count)
     print("total error count", total_error_count)
     print("total conf count", total_conf_count)
+    print("total match count", total_match_count)
+    print("total error match count", total_error_match_count)
+    print("total conf_smaller_than_cloud", total_conf_smaller_than_cloud)
+    print("total roots", len(roots))
     # save_error_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/error_map_pe_roots.txt'
     # data_utils.save_txt(save_error_path, error_roots)
 
 def process_root(args):
-    root, features_dir, map_pe_dir, seed_index, fov = args
+    root, features_dir, map_pe_dir, seed_index, fov, max_cloud = args
 
     data_path = f'{features_dir}{root}.hdf5'
     map_pe_path = f'{map_pe_dir}map_{root}.hdf5'
@@ -86,6 +97,15 @@ def process_root(args):
 
             error_count = len(np.where(labels == 0)[0])
             conf_count = len(np.where(confidence == 1)[0])
+            match_count = 0
+            error_match_count = 0
+            if error_count == conf_count:
+                match_count = 1
+                if error_count != 0:
+                    error_match_count = 1
+            conf_smaller_than_cloud = 0
+            if max_cloud - conf_count > 0:
+                conf_smaller_than_cloud = 1
             node_count = min(fov, size)
 
             # if abs(error_count - conf_count) == 1:
@@ -111,15 +131,15 @@ def process_root(args):
             # print("numpy edges", edge_list)
             # print("numpy edge time", time_8 - time_7)
 
-            return node_count, error_count, conf_count
+            return node_count, error_count, conf_count, match_count, error_match_count, conf_smaller_than_cloud
     except Exception as e:
         print("root: ", root, "error: ", e)
         # return root
-        return 0, 0, 0
+        return 0, 0, 0, 0, 0, 0
                 
 if __name__ == "__main__":
     config = data_utils.get_config()
     config['data']['map_pe_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes2/"
-    config['loader']['fov'] = 128
+    config['loader']['fov'] = 250
     test(config)
     

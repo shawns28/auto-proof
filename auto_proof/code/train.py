@@ -1,7 +1,7 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import visualize
 from auto_proof.code.utils import get_root_output
-from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader
+from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plots
 
 import os
 import torch
@@ -38,9 +38,9 @@ class Trainer(object):
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
-        self.train_loader = build_dataloader(config, train_dataset, run, 'train')
-        self.val_loader = build_dataloader(config, val_dataset, run, 'val')
-        self.test_loader = build_dataloader(config, test_dataset, run, 'test')
+        self.train_loader = build_dataloader(config, train_dataset, 'train')
+        self.val_loader = build_dataloader(config, val_dataset, 'val')
+        self.test_loader = build_dataloader(config, test_dataset, 'test')
         self.train_size = len(train_dataset) 
         self.val_size = len(val_dataset)
         self.test_size = len(test_dataset)
@@ -57,6 +57,8 @@ class Trainer(object):
         self.max_dist = config['trainer']['max_dist']
         self.visualize_rand_num = config['trainer']['visualize_rand_num']
         self.visualize_cutoff = config['trainer']['visualize_cutoff']
+        self.obj_loader_ratio = config['trainer']['obj_loader_ratio']
+
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
         # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
         self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
@@ -196,40 +198,30 @@ class Trainer(object):
                 total_labels_conf = torch.cat((total_labels_conf, labels_conf), dim=0)
 
                 output = output.detach().cpu().numpy()
+                mask = mask.detach().cpu().numpy()
                 roots = roots.detach().cpu().numpy().astype(int)
                 # TODO: See if this works
-                for i in range(len(roots)):
-                    root_to_output[roots[i]] = output[i][mask[i]]
+                if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
+                    for i in range(len(roots)):
+                        root_to_output[roots[i]] = output[i][mask[i]]
 
                 pbar.update()
+        if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
+            print("creating obj det dataset")
+            obj_det_data = ObjectDetectionDataset(self.config, root_to_output)
+            obj_det_loader_all = obj_det_dataloader(self.config, obj_det_data, self.obj_loader_ratio)
 
-        is_confident = False
-        print("creating obj det dataset")
-        obj_det_data_all = ObjectDetectionDataset(self.config, root_to_output, is_confident)
-        obj_det_loader_all = obj_det_dataloader(self.config, obj_det_data_all, 'val')
+            with tqdm(total=int(self.obj_loader_ratio * len(obj_det_data)) / self.batch_size, desc="obj det") as pbar:
+                for i, data in enumerate(obj_det_loader_all):
+                    pbar.update()
+            
+            metrics_dict = obj_det_data.__getmetrics__()
+            print("metrics at threshold 0.5", metrics_dict[0.5])
 
-        with tqdm(total=len(obj_det_data_all) / self.batch_size, desc="obj det all") as pbar:
-            for i, data in enumerate(obj_det_loader_all):
-                pbar.update()
-        
-        all_metrics_dict = obj_det_data_all.__getmetrics__()
-        print("all metrics at threshold 0.5", all_metrics_dict[0.5])
-
-        self.obj_plot(all_metrics_dict, 'all')
-
-        is_confident = True
-        print("creating obj det dataset for confident")
-        obj_det_data_conf = ObjectDetectionDataset(self.config, root_to_output, is_confident)
-        obj_det_loader_conf = obj_det_dataloader(self.config, obj_det_data_conf, 'val')
-
-        with tqdm(total=len(obj_det_data_conf) / self.batch_size, desc="obj det conf") as pbar:
-            for i, data in enumerate(obj_det_loader_conf):
-                pbar.update()
-        
-        conf_metrics_dict = obj_det_data_conf.__getmetrics__()
-        print("conf metrics at threshold 0.5", conf_metrics_dict[0.5])
-
-        self.obj_plot(conf_metrics_dict, 'confident')
+            save_path_tuples = obj_det_plots(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir)
+            for save_path_tuple in save_path_tuples:
+                mode, tp_mode, save_path = save_path_tuple
+                self.run[f"plots/obj_{mode}_{tp_mode}_precision_recall_curve"].append(neptune.types.File(save_path))
 
         # Taking out the initial 0 from initialization
         total_labels = total_labels.cpu().detach().numpy()[1:]
@@ -241,47 +233,6 @@ class Trainer(object):
         self.pinned_plot(total_labels_conf, total_output_conf, recall_targets, 'confident')
         
         return running_vloss / (self.val_size / self.batch_size)
-
-    def obj_plot(self, metrics_dict, mode):
-        plt.figure(figsize=(8, 8))
-        thresholds = self.config['trainer']['thresholds']
-        recalls = []
-        precisions = []
-        for i in range(len(thresholds)):
-            threshold = thresholds[i]
-            # Using label tp instead of output tp for now
-            precision, recall = self.get_precision_and_recall(metrics_dict[threshold]['label_tp'], metrics_dict[threshold]['fn'], metrics_dict[threshold]['fp'])
-            precisions.append(precision)
-            recalls.append(recall)
-
-        plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
-        plt.xlabel('Recall', fontsize=14)
-        plt.ylabel('Precision', fontsize=14)
-        if mode == 'all':
-            plt.title('Merge Error Object Based Precision-Recall Curve for All Nodes')
-        else:
-            plt.title('Merge Error Object Based Precision-Recall Curve for Confident Nodes')
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
-        plt.xlim(0, 1)
-        plt.ylim(0, 1)
-
-        for i in range(len(thresholds)):
-            plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
-        plt.legend()
-        plt.grid(True)
-        save_path = f'{self.save_dir}obj_precision_recall_{mode}_{self.epoch}.png'
-        plt.savefig(save_path)
-        self.run[f"plots/obj_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
-
-    def get_precision_and_recall(self, tp, fn, fp):
-        precision = 0
-        if (tp + fp > 0):
-            precision = tp / (tp + fp)
-        recall = 0
-        if (tp + fn > 0):
-            recall = tp / (tp + fn)
-        return precision, recall
 
     def pinned_plot(self, total_labels, total_output, recall_targets, mode):
         # Flipping the labels to make merge errors 1 for scikit-learn precision recall curve
