@@ -34,8 +34,10 @@ def main():
         source_files=["auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/base_config.json"],
     )
 
+    thresholds = config["trainer"]["thresholds"]
+    config["trainer"]["thresholds"] = str(thresholds)
     run["parameters"] = config
-    run["parameters"]["trainer"]["thresholds"] = str(config["trainer"]["thresholds"])
+    config["trainer"]["thresholds"] = thresholds
 
     print("Tatal num workers", config['loader']['num_workers'])
     print("Batch size" , config['loader']['batch_size'])

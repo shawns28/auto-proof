@@ -33,12 +33,10 @@ class ObjectDetectionDataset(Dataset):
         self.threshold_to_metrics = self.manager.dict()
         for threshold in self.thresholds:
             self.threshold_to_metrics[threshold] = self.manager.dict({
-                'all_label_tp': 0,
-                'all_output_tp': 0, 
+                'all_tp': 0,
                 'all_fn': 0, 
                 'all_fp': 0, 
-                'conf_label_tp': 0,
-                'conf_output_tp': 0, 
+                'conf_tp': 0,
                 'conf_fn': 0, 
                 'conf_fp': 0, 
             })
@@ -91,9 +89,6 @@ class ObjectDetectionDataset(Dataset):
                 label_components, conf_label_components = connected_components_by_attribute(g, 'label')
                 label_components, label_components_removed = remove_big_clouds(label_components, self.max_cloud)
                 conf_label_components, _ = remove_big_clouds(conf_label_components, self.max_cloud)
-                # TODO: Better way to do this because currently its glitched
-                # if len(label_components_removed) > 0:
-                #     print("Root has labeled component over max cloud", root)
 
                 for threshold in self.thresholds:
 
@@ -107,16 +102,14 @@ class ObjectDetectionDataset(Dataset):
                     # if len(conf_output_components) > 0 and len(output_components_removed) > 0:
                     #     conf_output_components = [[conf_output_component for conf_output_component in conf_output_components if conf_output_component.isdisjoint(output_components_removed)]]
 
-                    all_label_tp, all_fn = count_shared_and_unshared(label_components, output_components)
-                    all_output_tp, all_fp = count_shared_and_unshared(output_components, label_components)
-                    conf_label_tp, conf_fn = count_shared_and_unshared(conf_label_components, conf_output_components)
-                    conf_output_tp, conf_fp = count_shared_and_unshared(conf_output_components, conf_label_components)
-                    self.threshold_to_metrics[threshold]['all_label_tp'] += all_label_tp
-                    self.threshold_to_metrics[threshold]['all_output_tp'] += all_output_tp
+                    all_tp, all_fn = count_shared_and_unshared(label_components, output_components)
+                    _ , all_fp = count_shared_and_unshared(output_components, label_components)
+                    conf_tp, conf_fn = count_shared_and_unshared(conf_label_components, conf_output_components)
+                    _ , conf_fp = count_shared_and_unshared(conf_output_components, conf_label_components)
+                    self.threshold_to_metrics[threshold]['all_tp'] += all_tp
                     self.threshold_to_metrics[threshold]['all_fn'] += all_fn
                     self.threshold_to_metrics[threshold]['all_fp'] += all_fp
-                    self.threshold_to_metrics[threshold]['conf_label_tp'] += conf_label_tp
-                    self.threshold_to_metrics[threshold]['conf_output_tp'] += conf_output_tp
+                    self.threshold_to_metrics[threshold]['conf_tp'] += conf_tp
                     self.threshold_to_metrics[threshold]['conf_fn'] += conf_fn
                     self.threshold_to_metrics[threshold]['conf_fp'] += conf_fp
                     # if threshold == 0.5 and conf_fn > 0:
@@ -188,19 +181,18 @@ def obj_det_dataloader(config, dataset, ratio):
             prefetch_factor=prefetch_factor)
 
 def obj_det_plots(metrics_dict, thresholds, epoch, save_dir):
-    save_path_all_label = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'all', 'label_tp')
-    save_path_all_output = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'all', 'output_tp')
-    save_path_conf_label = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'conf', 'label_tp')
-    save_path_conf_output = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'conf', 'output_tp')
-    return [('all', 'label_tp', save_path_all_label), ('all', 'output_tp', save_path_all_output), ('conf', 'label_tp', save_path_conf_label), ('conf', 'output_tp', save_path_conf_output)]
+    save_path_all_label = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'all')
+    save_path_conf_label = obj_det_plot(metrics_dict, thresholds, epoch, save_dir, 'conf')
+    return [('all', save_path_all_label), ('conf', save_path_conf_label)]
 
-def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, mode, tp_mode):
+
+def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, mode):
     recalls = []
     precisions = []
     for i in range(len(thresholds)):
         threshold = thresholds[i]
         # Using label tp instead of output tp for now
-        precision, recall = get_precision_and_recall(metrics_dict[threshold][f'{mode}_{tp_mode}'], metrics_dict[threshold][f'{mode}_fn'], metrics_dict[threshold][f'{mode}_fp'])
+        precision, recall = get_precision_and_recall(metrics_dict[threshold][f'{mode}_tp'], metrics_dict[threshold][f'{mode}_fn'], metrics_dict[threshold][f'{mode}_fp'])
         precisions.append(precision)
         recalls.append(recall)
 
@@ -221,7 +213,7 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, mode, tp_mode):
         plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
     plt.legend()
     plt.grid(True)
-    save_path = f'{save_dir}obj_precision_recall_{mode}_{tp_mode}_{epoch}.png'
+    save_path = f'{save_dir}obj_precision_recall_{mode}_{epoch}.png'
     plt.savefig(save_path)
     return save_path
 

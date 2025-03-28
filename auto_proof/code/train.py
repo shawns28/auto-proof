@@ -215,8 +215,8 @@ class Trainer(object):
 
             save_path_tuples = obj_det_plots(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir)
             for save_path_tuple in save_path_tuples:
-                mode, tp_mode, save_path = save_path_tuple
-                self.run[f"plots/obj_{mode}_{tp_mode}_precision_recall_curve"].append(neptune.types.File(save_path))
+                mode, save_path = save_path_tuple
+                self.run[f"plots/obj_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
 
         # Taking out the initial 0 from initialization
         total_labels = total_labels.cpu().detach().numpy()[1:]
