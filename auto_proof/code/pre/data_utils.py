@@ -73,7 +73,7 @@ Returns:
 def load_txt(filepath):
     with open(filepath, 'r') as f:
         txt = f.read()
-    return np.array([int(v) for v in txt.strip().split('\n')])
+    return np.array([v for v in txt.strip().split('\n')])
 
 '''
 Saves arr as txt file at filepath

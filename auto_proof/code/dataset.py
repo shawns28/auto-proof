@@ -17,12 +17,14 @@ class AutoProofDataset(Dataset):
         self.config = config
         # 'root' is all, 'train', 'val', 'test'
         self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])
-        self.seed_index = config['loader']['seed_index']
+        # self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         # self.num_shards = config['data']['num_shards']
         self.features_dir = config['data']['features_dir']
         self.map_pe_dir = config['data']['map_pe_dir']
         self.dist_dir = config['data']['dist_dir']
+        self.rank_dir = config['data']['rank_dir']
+        self.box_cutoff = config['data']['box_cutoff']
         # self.shard_features = config['data']['shard_features']
         # self.features_sharded_dir = config['data']['features_sharded_dir']
 
@@ -52,13 +54,14 @@ class AutoProofDataset(Dataset):
         data_path = f'{self.features_dir}{root}.hdf5'
         map_pe_path = f'{self.map_pe_dir}map_{root}.hdf5'
         dist_path = f'{self.dist_dir}dist_{root}.hdf5'
+        rank_path = f'{self.rank_dir}rank_{root}.hdf5'
         # NOTE: Sharded features don't have proofread roots in them
         # if self.shard_features: 
         #     shard_id = hash_shard(root, self.num_shards)
         #     data_path = f'{self.features_sharded_dir}{shard_id}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as shard_file, h5py.File(map_pe_path, 'r') as map_pe_file, h5py.File(dist_path, 'r') as dist_file:
-                f = shard_file
+            with h5py.File(data_path, 'r') as f, h5py.File(map_pe_path, 'r') as map_pe_file, h5py.File(dist_path, 'r') as dist_file, h5py.File(rank_path, 'r') as rank_file:
+                # f = shard_file
                 # if self.shard_features:
                 #     f = shard_file[str(root)]
                 vertices = torch.from_numpy(f['vertices'][:])
@@ -80,8 +83,9 @@ class AutoProofDataset(Dataset):
                 #     confidence[labels == 0] = 1
 
                 # Not adding rank as a feature
-                rank_num = f'rank_{self.seed_index}'
-                rank = torch.from_numpy(f[rank_num][:])
+                # rank_num = f'rank_{self.seed_index}'
+                # rank = torch.from_numpy(f[rank_num][:])
+                rank = torch.from_numpy(rank_file[f'rank_{self.box_cutoff}'][:])
 
                 dist_to_error = torch.from_numpy(dist_file['dist'][:]).unsqueeze(1)
 

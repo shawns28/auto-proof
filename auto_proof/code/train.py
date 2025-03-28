@@ -119,7 +119,7 @@ class Trainer(object):
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-                _ , input, labels, confidence, dist_to_error, adj = [x.float().to(self.device) for x in data]
+                input, labels, confidence, dist_to_error, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
@@ -159,13 +159,9 @@ class Trainer(object):
         with tqdm(total=self.val_size / self.batch_size, desc="val") as pbar:
             for i, data in enumerate(self.val_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-                roots, input, labels, confidence, dist_to_error, adj = data
+                roots = data[0]
+                input, labels, confidence, dist_to_error, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
-                input = input.float().to(self.device)
-                labels = labels.float().to(self.device)
-                confidence = confidence.float().to(self.device)
-                dist_to_error = dist_to_error.float().to(self.device)
-                adj = adj.float().to(self.device)
                 output = self.model(input, adj) # (b, fov, 1)
                 loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
                 self.run["val/loss"].append(loss)
@@ -199,8 +195,7 @@ class Trainer(object):
 
                 output = output.detach().cpu().numpy()
                 mask = mask.detach().cpu().numpy()
-                roots = roots.detach().cpu().numpy().astype(int)
-                # TODO: See if this works
+                # roots = roots.detach().cpu().numpy().astype(int)
                 if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
                     for i in range(len(roots)):
                         root_to_output[roots[i]] = output[i][mask[i]]
@@ -284,10 +279,10 @@ class Trainer(object):
         dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
 
         visualize_tuples = [
-            (864691135463333789, True, 'train'), 
-            (864691136379030485, True, 'val'), 
-            (864691136443843459, True, 'test'), 
-            (864691134918370314, True, 'test')]
+            ('864691135463333789_000', True, 'train'), 
+            ('864691136379030485_000', True, 'val'), 
+            ('864691136443843459_000', True, 'test'), 
+            ('864691134918370314_000', True, 'test')]
         
         for _ in range(self.visualize_rand_num):
             mode, dataset = random.choice(list(dataset_dict.items()))

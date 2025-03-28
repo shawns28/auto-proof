@@ -110,19 +110,21 @@ def visualize_root(stuff):
 
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
-    run_id = 'AUT-215'
+    # run_id = 'AUT-215'
+    run_id = 'AUT-246'
     run_dir = f'{ckpt_dir}{run_id}/'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
 
-    data = AutoProofDataset(config, 'val')
+    data = AutoProofDataset(config, 'train')
     # config['model']['depth'] = 3
     # config['model']['n_head'] = 4
     model = create_model(config)
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20241104_132019/model_29'
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250212_125759/model_1.pt'
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250215_212005/model_34.pt'
-    ckpt_path = f'{run_dir}model_55.pt'
+    # ckpt_path = f'{run_dir}model_55.pt'
+    ckpt_path = f'{run_dir}model_1.pt'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict)
@@ -137,11 +139,11 @@ if __name__ == "__main__":
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135937424949]
-    # roots = [864691135463333789]
+    roots = [864691135463333789]
     # roots = [864691135373853640, 864691135658276738, 864691135684548279, 864691135684548023, 864691135404040430, 864691135065359940, 864691135386905985, 864691135404090350, 864691135396807713, 864691135387767681, 864691135341705649, 864691135446000274, 864691135947108705, 864691135947108193, 864691135447045460, 864691135359346776, 864691135987462147]
     # roots = [864691135684548279]
     # roots = [864691135396807713]
-    roots = [864691135989085184, 864691135683792114, 864691136483519276, 864691135571609125, 864691135876419923, 864691136310246234, 864691136009015212, 864691135697685269, 864691136266911476]
+    # roots = [864691135989085184, 864691135683792114, 864691136483519276, 864691135571609125, 864691135876419923, 864691136310246234, 864691136009015212, 864691135697685269, 864691136266911476]
     # Roots that are sus because conf and error are similar but not exact
     # roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
     max_dist = config['trainer']['max_dist']
@@ -152,7 +154,8 @@ if __name__ == "__main__":
     #         pbar.update()
     config['trainer']['visualize_cutoff'] = 4400
     config['loader']['fov'] = 250
-
+    for i in range(len(roots)):
+        roots[i] = str(roots[i]) + '_000'
            
     # for i in range(10):
     for root in roots:

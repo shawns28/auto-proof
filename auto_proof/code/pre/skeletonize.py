@@ -116,6 +116,8 @@ def skeletonize(config):
                 pbar.update()
                 continue
 
+            # ALL OF THE RANK RELATED LOGIC IS DEPRECATED
+            # TODO: update the code so that it works better for everything
             rep_index = np.random.randint(0, len(skel_vertices))
             if not is_proofread:
                 rep_coord = root_id_to_rep_coords[root_id]

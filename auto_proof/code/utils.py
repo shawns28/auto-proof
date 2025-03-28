@@ -47,12 +47,13 @@ def get_root_output(model, device, data, root):
         config = data_utils.get_config()
         client, _, _ = data_utils.create_client(config)  
         cv = client.info.segmentation_cloudvolume(progress=False)
+        root_without_num = int(root[:-4]) # Removing _000 for mesh retrieval
         mesh = cv.mesh.get(
-            root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False
-        )[root]
+            root_without_num, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False
+        )[root_without_num]
         # seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
         # cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
-        # mesh = cv_seg.mesh.get(root, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=True)[root]
+        # mesh = cv_seg.mesh.get(root_without_num, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=True)[root_without_num]
         
         root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
 

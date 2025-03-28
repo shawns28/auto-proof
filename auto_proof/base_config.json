@@ -10,10 +10,11 @@
         "features_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
         "map_pe_dir":  "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/map_pes/",
         "dist_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/dist/",
-        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023.txt",
-        "train_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/train_roots_369502_913.txt",
-        "val_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/val_roots_45333_69.txt",
-        "test_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/test_roots_46188_69.txt",
+        "rank_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ranks/",
+        "root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023_conv.txt",
+        "train_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/train_roots_369502_913_conv.txt",
+        "val_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/val_roots_45333_69_conv.txt",
+        "test_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/test_roots_46188_69_conv.txt",
         "proofread_at_mat_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt",
         "features_sharded_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features_10000_gzip_4/",
         "cutoff": 1000,
@@ -25,13 +26,13 @@
         "num_shards": 10000,
         "shard_features": false,
         "is_proofread": false,
-        "pos_enc_dim": 32
+        "pos_enc_dim": 32,
+        "box_cutoff": 100
     },
     "loader": {
         "num_workers": 32,
         "prefetch_factor": 0,
         "batch_size": 32,
-        "seed_index": 1,
         "fov": 256,
         "feat_dim": 36
     },

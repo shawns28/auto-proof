@@ -19,11 +19,13 @@ class ObjectDetectionDataset(Dataset):
     def __init__(self, config, root_to_output):
         self.config = config
 
-        self.seed_index = config['loader']['seed_index']
+        # self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.features_dir = config['data']['features_dir']
+        self.rank_dir = config['data']['rank_dir']
         self.thresholds = config['trainer']['thresholds']
         self.max_cloud = config['trainer']['max_cloud']
+        self.box_cutoff = config['data']['box_cutoff']
 
         self.roots = list(root_to_output.keys())
         self.manager = Manager()
@@ -51,13 +53,15 @@ class ObjectDetectionDataset(Dataset):
         root = self.roots[index]
         output = self.root_to_output[root]
         data_path = f'{self.features_dir}{root}.hdf5'
+        rank_path = f'{self.rank_dir}rank_{root}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as f:
+            with h5py.File(data_path, 'r') as f, h5py.File(rank_path, 'r') as rank_file:
                 labels = f['label'][:]
                 confidence = f['confidence'][:]
 
-                rank_num = f'rank_{self.seed_index}'
-                rank = f[rank_num][:]
+                # rank_num = f'rank_{self.seed_index}'
+                # rank = f[rank_num][:]
+                rank= rank_file[f'rank_{self.box_cutoff}'][:]
 
                 edges = f['edges'][:]
 
@@ -115,8 +119,8 @@ class ObjectDetectionDataset(Dataset):
                     self.threshold_to_metrics[threshold]['conf_output_tp'] += conf_output_tp
                     self.threshold_to_metrics[threshold]['conf_fn'] += conf_fn
                     self.threshold_to_metrics[threshold]['conf_fp'] += conf_fp
-                    if threshold == 0.5 and conf_fn > 0:
-                        print("root with conf fn", root)
+                    # if threshold == 0.5 and conf_fn > 0:
+                    #     print("root with conf fn", root)
         except Exception as e:
             print("root: ", root, "error: ", e)
             return None
@@ -205,9 +209,9 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, mode, tp_mode):
     plt.xlabel('Recall', fontsize=14)
     plt.ylabel('Precision', fontsize=14)
     if mode == 'all':
-        plt.title('Merge Error Object Based Precision-Recall Curve for All Nodes Epoch {epoch}')
+        plt.title(f'Merge Error Object Based Precision-Recall Curve for All Nodes Epoch {epoch}')
     else:
-        plt.title('Merge Error Object Based Precision-Recall Curve for Confident Nodes Epoch {epoch}')
+        plt.title(f'Merge Error Object Based Precision-Recall Curve for Confident Nodes Epoch {epoch}')
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.xlim(0, 1)
