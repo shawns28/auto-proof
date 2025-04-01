@@ -4,10 +4,9 @@
 #SBATCH --cpus-per-task=1             # Only need one core
 #SBATCH --mem=8gb                     # Job memory request (per node)
 #SBATCH --time=72:00:00               # Time limit hrs:min:sec
-#SBATCH --array=1-24
 #SBATCH -o /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/skeletonize_logs/%A_%a.out
 # %A" is replaced by the job ID and "%a" with the array index
 #SBATCH -e /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/skeletonize_logs/%A_%a.err
 #SBATCH --partition celltypes         # Partition used for processing
 
-conda run -n gt python -m auto_proof.code.pre.skeletonize -c $SLURM_ARRAY_TASK_ID
+conda run -n gt python -m auto_proof.code.pre.skeletonize

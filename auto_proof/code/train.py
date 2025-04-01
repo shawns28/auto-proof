@@ -33,6 +33,8 @@ class Trainer(object):
         self.batch_size = config['loader']['batch_size']
         self.data_dir = config['data']['data_dir']
         self.save_dir = f'{self.ckpt_dir}{self.run_id}/'
+        self.box_cutoff = config['data']['box_cutoff']
+        self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
 
         ### datasets
         self.train_dataset = train_dataset
@@ -44,6 +46,8 @@ class Trainer(object):
         self.train_size = len(train_dataset) 
         self.val_size = len(val_dataset)
         self.test_size = len(test_dataset)
+
+        self.obj_det_val_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
 
         self.class_weights = torch.tensor(config['trainer']['class_weights']).float().to(self.device)
         self.conf_weight = config['trainer']['conf_weight']
@@ -57,7 +61,6 @@ class Trainer(object):
         self.max_dist = config['trainer']['max_dist']
         self.visualize_rand_num = config['trainer']['visualize_rand_num']
         self.visualize_cutoff = config['trainer']['visualize_cutoff']
-        self.obj_loader_ratio = config['trainer']['obj_loader_ratio']
 
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
         # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
@@ -198,27 +201,26 @@ class Trainer(object):
                 # roots = roots.detach().cpu().numpy().astype(int)
                 if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
                     for i in range(len(roots)):
-                        root_to_output[roots[i]] = output[i][mask[i]]
+                        if roots[i] in self.obj_det_val_roots:
+                            root_to_output[roots[i]] = output[i][mask[i]]
 
                 pbar.update()
         if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
             print("creating obj det dataset")
             obj_det_data = ObjectDetectionDataset(self.config, root_to_output)
-            obj_det_loader_all = obj_det_dataloader(self.config, obj_det_data, self.obj_loader_ratio)
+            obj_det_loader_all = obj_det_dataloader(self.config, obj_det_data)
 
-            with tqdm(total=int(self.obj_loader_ratio * len(obj_det_data)) / self.batch_size, desc="obj det") as pbar:
+            with tqdm(total=len(obj_det_data) / self.batch_size, desc="obj det") as pbar:
                 for i, data in enumerate(obj_det_loader_all):
                     pbar.update()
             
             metrics_dict = obj_det_data.__getmetrics__()
-            print("metrics at threshold 0.5", metrics_dict[0.5])
 
-            save_path_tuples = obj_det_plots(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir)
-            for save_path_tuple in save_path_tuples:
-                mode, save_path = save_path_tuple
-                self.run[f"plots/obj_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
+            obj_save_path = obj_det_plots(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
+            self.run[f"plots/obj_precision_recall_curve"].append(neptune.types.File(obj_save_path))
 
         # Taking out the initial 0 from initialization
+        # NOTE: Theses plots are no longer useful really
         total_labels = total_labels.cpu().detach().numpy()[1:]
         total_output = total_output.cpu().detach().numpy()[1:]
         self.pinned_plot(total_labels, total_output, recall_targets, 'all')

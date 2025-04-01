@@ -38,9 +38,26 @@ def convert_roots_in_txt(root_path):
     new_root_path = root_path[:-4] + '_conv' + root_path[-4:]
     data_utils.save_txt(new_root_path, new_roots)
 
+def proofread_roots(root_path, save_path):
+    roots = data_utils.load_txt(root_path)
+    proofread_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt")
+    roots_in_path = []
+    for root in roots:
+        root_without_identifier = root[:-4]
+        if root_without_identifier in proofread_roots:
+            for i in range(1, 10):
+                new_str = root_without_identifier + '_00' + str(i)
+                roots_in_path.append(new_str)
+            for i in range(10, 20):
+                new_str = root_without_identifier + '_0' + str(i)
+                roots_in_path.append(new_str)
+    data_utils.save_txt(save_path, roots_in_path)
+
 # folder_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/"
 # dir_len = 500000
 # rename_files(folder_dir, dir_len)
 
-root_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/val_roots_45333_69.txt"
-convert_roots_in_txt(root_path)
+root_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/train_roots_369502_913_conv.txt"
+# convert_roots_in_txt(root_path)
+save_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_roots_in_train_roots_369502_913_conv.txt"
+proofread_roots(root_path, save_path)

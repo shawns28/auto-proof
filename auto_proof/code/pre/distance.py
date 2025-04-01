@@ -84,8 +84,10 @@ def save_dist_roots(dist_dir, post_dist_roots_file):
 
 if __name__ == "__main__":
     config = data_utils.get_config()
-    dist_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/dist/"
-    # create_dist(config, dist_dir)
+    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
+    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_roots_in_train_roots_369502_913_conv.txt"
+    dist_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/dist/"
+    create_dist(config, dist_dir)
 
-    post_dist_roots_file = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_dist_roots.txt"
+    post_dist_roots_file = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_dist_roots.txt"
     save_dist_roots(dist_dir, post_dist_roots_file)

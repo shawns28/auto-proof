@@ -27,6 +27,7 @@ class Visitor(gt.BFSVisitor):
         self.vp_rank[u] = self.rank
 
 '''
+NOTE/TODO: Doesn't take into account box cutoff so need to add that in
 Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
 which are pulled from cave client for the root. Additionally saves successful roots to txt.
 Input:
@@ -48,7 +49,8 @@ def skeletonize(config):
 
     root_ids = data_utils.load_txt(config['data']['root_path'])
     root_ids = data_utils.get_roots_chunk(config, root_ids, chunk_num=chunk_num, num_chunks=num_chunks)
-    # root_ids = data_utils.load_txt(f'{data_directory}root_ids/unprocessed_roots.txt')    
+    # root_ids = data_utils.load_txt(f'{data_directory}root_ids/unprocessed_roots.txt')
+    # root_ids = ['864691135359413848_001', '864691135359413848_002']
     # root_ids = [864691136272969918, 864691135776571232, 864691135474550843, 864691135445638290, 864691136899949422, 864691136175092486, 864691135937424949]
     # root_ids = [864691135445639826, 864691135446597204]
     # root_ids = [864691131630728977, 864691131757470881]
@@ -62,15 +64,15 @@ def skeletonize(config):
     if not os.path.isdir(features_directory):
         os.makedirs(features_directory)
 
-    root_id_to_rep_coords_path = f'{data_directory}dicts/root_id_to_rep_coords_{mat_version}.pkl'
-    root_id_to_rep_coords = data_utils.load_pickle_dict(root_id_to_rep_coords_path)
+    if not is_proofread:
+        root_id_to_rep_coords_path = f'{data_directory}dicts/root_id_to_rep_coords_{mat_version}.pkl'
+        root_id_to_rep_coords = data_utils.load_pickle_dict(root_id_to_rep_coords_path)
 
     cutoff = config["data"]["cutoff"]
     num_rand_seeds = config["data"]["num_rand_seeds"]    
     
     with tqdm(total=len(root_ids)) as pbar:
         for root_id in root_ids:
-
             skel_hf_path = f'{features_directory}{root_id}.hdf5'
             # Skip already processed roots
             if os.path.exists(skel_hf_path):
@@ -82,29 +84,24 @@ def skeletonize(config):
             retries = 2
             delay = 1
             failed = False
+            root_id_without_num = int(root_id[:-4])
             for attempt in range(1, retries + 1):
                 try: 
-                    skel_dict = client.skeleton.get_skeleton(root_id=root_id, datastack_name=datastack_name, output_format='dict')
+                    skel_dict = client.skeleton.get_skeleton(root_id=root_id_without_num, skeleton_version=4, datastack_name=datastack_name, output_format='dict')
                     break
                 except Exception as e:
                     if attempt < retries:
-                        print("Couldn't retrieve skeleton for root id: ", root_id, ". Attempt ", attempt, "/", retries, "Error: ", e)
+                        print("Couldn't retrieve skeleton for root id: ", root_id_without_num, ". Attempt ", attempt, "/", retries, "Error: ", e)
                         time.sleep(delay)
                         continue
                     else:
-                        print("Failed to retrieve skeleton for root id: ", root_id, ". Skipping this root id") 
+                        print("Failed to retrieve skeleton for root id: ", root_id_without_num, ". Skipping this root id") 
                         failed = True
                         pbar.update()
                         continue
             
             if failed:
                 continue
-
-            # TODO: Delete after running
-            # For testing dict
-            # print("Saving json dict")
-            # skel_json_path = f'{data_directory}{root_id}.json'
-            # data_utils.save_json(skel_json_path, skel_dict)
 
             try:
                 skel_edges = np.array(skel_dict['edges'])
@@ -116,7 +113,7 @@ def skeletonize(config):
                 pbar.update()
                 continue
 
-            # ALL OF THE RANK RELATED LOGIC IS DEPRECATED
+            # ALL OF THE RANK RELATED LOGIC IS DEPRECATED BECAUSE IT DOESN'T TAKE INTO ACCOUNT BOX CUTOFF
             # TODO: update the code so that it works better for everything
             rep_index = np.random.randint(0, len(skel_vertices))
             if not is_proofread:
@@ -146,28 +143,21 @@ def skeletonize(config):
             new_skel_radii = skel_radii[mask_indices]
 
             new_edges = prune_edges(mask_indices, skel_edges)
-    
-            # TODO: Delete after testing
-            # print("saving json after cutoff")
-            # new_json_dict = {}
-            # for i in range(len(ranks)):
-            #     new_json_dict[f'rank_{i}'] = ranks[i].tolist()
-            # data_utils.save_json(f'{root_dir}/{root_id}_{cutoff}.json', new_json_dict)
 
+            # NOTE: Removed compartment
             features_dict = {
-                'root_id': root_id,
+                'root_id': root_id_without_num,
                 'num_initial_vertices': len(skel_vertices),
                 'num_vertices': len(new_skel_vertices),
                 'cutoff': cutoff,
                 'vertices': new_skel_vertices,
                 'edges': new_edges,
-                'compartment': new_skel_compartment,
                 'radius': new_skel_radii
             }
             
             for i in range(len(ranks)):
                 features_dict[f'rank_{i}'] = ranks[i]
-            
+
             # Save features to hdf5 file
             with h5py.File(skel_hf_path, 'a') as skel_hf:
                 for feature in features_dict:
@@ -223,7 +213,7 @@ def get_closest(arr, target):
 
 def save_skeletonized_roots(config, post_skel_path):
     files = glob.glob(f'{config['data']['features_dir']}*')
-    roots = [files[i][-23:-5] for i in range(len(files))]
+    roots = [files[i][-27:-5] for i in range(len(files))]
     print(roots[0])
     data_utils.save_txt(post_skel_path, roots)
     
@@ -234,13 +224,18 @@ if __name__ == "__main__":
     # config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt"
     # post_skel_path = f'{config['data']['data_dir']}root_ids/post_skel_proofread_roots.txt'
 
-    config['data']['is_proofread'] = False
-    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
-    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/debugging_roots.txt"
-    post_skel_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_skel_debugging_roots.txt"
+    # config['data']['is_proofread'] = False
+    # config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
+    # config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/debugging_roots.txt"
+    # post_skel_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_skel_debugging_roots.txt"
 
+    config['data']['is_proofread'] = True
+    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
+    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_roots_in_train_roots_369502_913_conv.txt"
+    config['data']['num_rand_seeds'] = 0
+    post_skel_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_skel_debugging_roots.txt"
     skeletonize(config)
     
     # NOTE: This will save the file each time a chunk finishes but should still result in the correct file
     # print("Saving successfuly skeletonized roots list as txt")
-    # save_skeletonized_roots(config, post_skel_path)
+    save_skeletonized_roots(config, post_skel_path)
