@@ -68,12 +68,10 @@ class AutoProofDataset(Dataset):
                 # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 # compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
                 radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
-                labels = torch.from_numpy(f['label'][:])
+                labels = torch.from_numpy(f['label'][:]).unsqueeze(1).int()
                 # print("original labels", labels)
-                confidence = torch.from_numpy(f['confidence'][:])
+                confidence = torch.from_numpy(f['confidence'][:]).unsqueeze(1).int()
                 # print("num_initial_vertices", f['num_initial_vertices'][()])
-                labels = labels.unsqueeze(1).int()
-                confidence = confidence.unsqueeze(1).int()
 
                 pos_enc = torch.from_numpy(map_pe_file['map_pe'][:])
                 # pos_enc = torch.from_numpy(f['pos_enc'][:])
@@ -85,7 +83,7 @@ class AutoProofDataset(Dataset):
                 # Not adding rank as a feature
                 # rank_num = f'rank_{self.seed_index}'
                 # rank = torch.from_numpy(f[rank_num][:])
-                rank = torch.from_numpy(rank_file[f'rank_{self.box_cutoff}'][:])
+                rank = torch.from_numpy(rank_file[f'rank_{self.box_cutoff}'][:]).unsqueeze(1)
 
                 dist_to_error = torch.from_numpy(dist_file['dist'][:]).unsqueeze(1)
 
@@ -106,19 +104,21 @@ class AutoProofDataset(Dataset):
                     labels = labels[indices]
                     confidence = confidence[indices]
                     dist_to_error = dist_to_error[indices]
+                    rank = rank[indices]
                     edges = prune_edges(edges, indices)
                 elif(size < self.fov):
                     input = torch.cat((input, torch.zeros((self.fov - size, input.shape[1]))), dim=0)
                     labels = torch.cat((labels, torch.full((self.fov - size, 1), -1)))
                     confidence = torch.cat((confidence, torch.full((self.fov - size, 1), -1)))
                     dist_to_error = torch.cat((dist_to_error, torch.full((self.fov - size, 1), -1)))
+                    rank = torch.cat((rank, torch.full((self.fov - size, 1), -1)))
 
                 adj = edge_list_to_adjency(edges, size, self.fov)
         except Exception as e:
             print("root: ", root, "error: ", e)
             return None
             
-        return root, input, labels, confidence, dist_to_error, adj
+        return root, input, labels, confidence, dist_to_error, rank, adj
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)

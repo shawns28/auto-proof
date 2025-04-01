@@ -14,7 +14,7 @@ import multiprocessing
 # Remember to remove morphlink package that already exists in directory
 
 # Not detaching here because it causes weird error where it wants it to 
-def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, path):
+def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, show_tol, path):
     pv.set_jupyter_backend('trame')
     vertices = vertices.detach().cpu().numpy()
     edges = edges.detach().cpu().numpy()
@@ -35,8 +35,9 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     # 2 = non-confident non-merge
     # 3 = confident non-merge
 
-    dist_mask_inc = np.logical_and(dist_to_error > 0, dist_to_error <= max_dist)
-    dist_mask_exc = np.logical_or(dist_to_error == 0, dist_to_error > max_dist)
+    if show_tol:
+        dist_mask_inc = np.logical_and(dist_to_error > 0, dist_to_error <= max_dist)
+        dist_mask_exc = np.logical_or(dist_to_error == 0, dist_to_error > max_dist)
     
     pv.global_theme.multi_rendering_splitting_position = 0.5
 
@@ -57,19 +58,28 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     plotter.subplot(0)
     plotter.add_mesh(skel_poly, color='black')
     
-    if len(vertices[c_m & dist_mask_exc]) > 0:
-        plotter.add_points(vertices[c_m & dist_mask_exc], color='red', label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-    if len(vertices[nc_nm & dist_mask_exc]) > 0:
-        color_hex = "#9ACD32"  # Hexadecimal code for yellow-green
-        yellow_green = pv.Color(color_hex) 
-        plotter.add_points(vertices[nc_nm & dist_mask_exc], color=yellow_green, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-    if len(vertices[c_nm & dist_mask_exc]) > 0:
-        plotter.add_points(vertices[c_nm & dist_mask_exc], color='green', label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-    if len(vertices[dist_mask_inc]) > 0:
-        color_hex = "#FFD580" # Hexadecimal code for light 
-        light_orange = pv.Color(color_hex) 
-        plotter.add_points(vertices[dist_mask_inc], color=light_orange, label='tolerance points', point_size=10, render_points_as_spheres=True, show_vertices=True)
-    
+    if show_tol:
+        if len(vertices[c_m & dist_mask_exc]) > 0:
+            plotter.add_points(vertices[c_m & dist_mask_exc], color='red', label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+        if len(vertices[nc_nm & dist_mask_exc]) > 0:
+            color_hex = "#9ACD32"  # Hexadecimal code for yellow-green
+            yellow_green = pv.Color(color_hex) 
+            plotter.add_points(vertices[nc_nm & dist_mask_exc], color=yellow_green, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+        if len(vertices[c_nm & dist_mask_exc]) > 0:
+            plotter.add_points(vertices[c_nm & dist_mask_exc], color='green', label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+        if len(vertices[dist_mask_inc]) > 0:
+            color_hex = "#FFD580" # Hexadecimal code for light 
+            light_orange = pv.Color(color_hex) 
+            plotter.add_points(vertices[dist_mask_inc], color=light_orange, label='tolerance points', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    else:
+        if len(vertices[c_m]) > 0:
+            plotter.add_points(vertices[c_m], color='red', label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+        if len(vertices[nc_nm]) > 0:
+            color_hex = "#9ACD32"  # Hexadecimal code for yellow-green
+            yellow_green = pv.Color(color_hex) 
+            plotter.add_points(vertices[nc_nm], color=yellow_green, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+        if len(vertices[c_nm]) > 0:
+            plotter.add_points(vertices[c_nm], color='green', label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
     # Doesn't work for interactive
     plotter.add_legend()
     plotter.add_text("Labels", font_size=14)
@@ -142,6 +152,9 @@ if __name__ == "__main__":
     roots = ['864691136041340246_000']
     roots = ['864691135463333789_000']
     roots = ['864691135439772402_000']
+    roots = ['864691135191257833_000']
+    # roots = ['864691135490886887_000']
+    roots = ['864691136521643153_000']
     # roots = [864691135373853640, 864691135658276738, 864691135684548279, 864691135684548023, 864691135404040430, 864691135065359940, 864691135386905985, 864691135404090350, 864691135396807713, 864691135387767681, 864691135341705649, 864691135446000274, 864691135947108705, 864691135947108193, 864691135447045460, 864691135359346776, 864691135987462147]
     # roots = [864691135684548279]
     # roots = [864691135396807713]
@@ -156,7 +169,7 @@ if __name__ == "__main__":
     #         pbar.update()
     config['trainer']['visualize_cutoff'] = 9600
     config['loader']['fov'] = 250
-
+    config['trainer']['show_tol'] = False
            
     # for i in range(10):
     for root in roots:
@@ -171,7 +184,7 @@ if __name__ == "__main__":
             print("getting root output")
             vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
             print("is_proofread", is_proofread)
-            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, path)
+            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], path)
         # except Exception as e:
         #     print("Failed visualization for root id: ", root, "error: ", e)
         #     continue

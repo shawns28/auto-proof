@@ -24,7 +24,6 @@ class ObjectDetectionDataset(Dataset):
         self.features_dir = config['data']['features_dir']
         self.rank_dir = config['data']['rank_dir']
         self.thresholds = config['trainer']['thresholds']
-        self.max_cloud = config['trainer']['max_cloud']
         self.box_cutoff = config['data']['box_cutoff']
         self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
 
@@ -73,28 +72,20 @@ class ObjectDetectionDataset(Dataset):
                 threshold_to_output = {}
                 for threshold in self.thresholds:
                     threshold_to_output[threshold] = np.where(output < threshold, 0, 1)
-                    
-                node_attributes = {}
-                for i in range(len(labels)):
-                    node_attributes[i] = {'label': labels[i]}
-                    node_attributes[i]['confidence'] = confidence[i]
-                    for threshold in self.thresholds:
-                        node_attributes[i][threshold] = threshold_to_output[threshold][i]
-                    node_attributes[i]['box_cutoff'] = box_cutoff_nodes[i]
 
                 g = nx.Graph()
                 g.add_edges_from(edges)
-                g.add_nodes_from([(i, node_attributes[i]) for i in range(len(labels))])
 
-                label_ccs = get_label_components(g)
+                label_ccs = get_label_components(g, labels, box_cutoff_nodes)
                 
-                new_label_ccs, g = remove_isolated_errors(g, label_ccs, confidence)
+                new_label_ccs, confidence = remove_isolated_errors(g, label_ccs, confidence)
                 if len(new_label_ccs) != len(label_ccs):
-                    print("root has an isolated error", root)
+                    with open(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/mixed_isolated_error/"}{root}', 'w') as f:
+                        pass
                 label_ccs = new_label_ccs
 
                 for threshold in self.thresholds:
-                    output_ccs = get_output_components(g, threshold)
+                    output_ccs = get_output_components(g, threshold_to_output[threshold], confidence)
                     output_ccs, conf_fp = remove_big_output_ccs(output_ccs, labels, self.obj_det_error_cloud_ratio, box_cutoff_nodes)
                     conf_tp, conf_fn = count_shared_and_unshared(label_ccs, output_ccs)
                     self.threshold_to_metrics[threshold]['conf_tp'] += conf_tp
@@ -122,21 +113,20 @@ def remove_isolated_errors(graph, label_ccs, confidence):
                 break
         if is_isolated:
             for node in cc:
-                graph.nodes[node]['confidence'] = 0
-                confidence[node] == 0
+                confidence[node] = 0
         else:
             new_label_ccs.append(cc)
-    return new_label_ccs, graph
+    return new_label_ccs, confidence
 
-def get_label_components(graph):
+def get_label_components(graph, labels, box_cutoff_nodes):
     # data=False since we don't need other attributes of the nodes after we do this
-    subgraph_nodes = [node for node, data in graph.nodes(data=True) if (data.get('label') == 0 and data.get('box_cutoff') == True)]
+    subgraph_nodes = [i for i in range(len(labels)) if (labels[i] == 0 and box_cutoff_nodes[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
-def get_output_components(graph, threshold):
-    subgraph_nodes = [node for node, data in graph.nodes(data=True) if (data.get(threshold) == 0 and data.get('confidence') == 1)]
+def get_output_components(graph, threshold_output, confidence):
+    subgraph_nodes = [i for i in range(len(confidence)) if (threshold_output[i] == 0 and confidence[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
@@ -208,7 +198,7 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, obj_det_error_cloud_
     plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
     plt.xlabel('Recall', fontsize=14)
     plt.ylabel('Precision', fontsize=14)
-    plt.title(f'Merge Error Object Precision-Recall Curve for Confident Nodes with Error Cloud Ratio: {obj_det_error_cloud_ratio} in Box: {box_cutoff} Epoch {epoch}')
+    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {obj_det_error_cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.xlim(0, 1)
@@ -251,16 +241,17 @@ if __name__ == "__main__":
     # roots = [864691136379030485]
     # roots = [864691136443843459]
     # roots = [864691136443843459, 864691135463333789]
-    roots = ['864691136041340246_000']
+    # roots = ['864691136041340246_000']
+    # roots = ['864691136521643153_000']
     # roots = ['864691135463333789_000']
     # roots = ['864691135439772402_000']
 
-    mode = 'root'
+    mode = 'val'
     data = AutoProofDataset(config, mode)
     config['loader']['batch_size'] = 32
     config['loader']['num_workers'] = 32
     config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/conf_no_error_in_box_roots_val.txt"
-    config['trainer']['obj_det_error_cloud_ratio'] = 0.25
+    config['trainer']['obj_det_error_cloud_ratio'] = 0.2
     config['data']['box_cutoff'] = 100
     data_loader = build_dataloader(config, data, mode)
 
@@ -268,40 +259,40 @@ if __name__ == "__main__":
     with torch.no_grad():
         root_to_output = {}
 
-        for root in roots:
-            print("Getting root output")
-            # Remember this doesn't pre mask so only use things above fov for testing right now
-            vertices, edges, labels, confidence, output, _, _, _, _ = get_root_output(model, device, data, root)
-            output = output.detach().cpu().numpy().squeeze(-1)
-            root_to_output[root] = output
+        # for root in roots:
+        #     print("Getting root output")
+        #     # Remember this doesn't pre mask so only use things above fov for testing right now
+        #     vertices, edges, labels, confidence, output, _, _, _, _ = get_root_output(model, device, data, root)
+        #     output = output.detach().cpu().numpy().squeeze(-1)
+        #     root_to_output[root] = output
 
-        # obj_det_val_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
+        obj_det_val_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
 
-        # with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
-        #     for i, data in enumerate(data_loader):
-        #         # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-        #         roots, input, labels, confidence, dist_to_error, adj = data
-        #         # TODO: Only send input and adj to device and make everything later numpy to make things faster?
-        #         input = input.float().to(device)
-        #         labels = labels.float().to(device)
+        with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
+            for i, data in enumerate(data_loader):
+                # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
+                roots, input, labels, confidence, dist_to_error, adj = data
+                # TODO: Only send input and adj to device and make everything later numpy to make things faster?
+                input = input.float().to(device)
+                labels = labels.float().to(device)
 
-        #         adj = adj.float().to(device)
-        #         output = model(input, adj) # (b, fov, 1)
+                adj = adj.float().to(device)
+                output = model(input, adj) # (b, fov, 1)
 
-        #         sigmoid = nn.Sigmoid()
-        #         output = sigmoid(output).squeeze(-1) # (b, fov)
-        #         labels = labels.squeeze(-1) # (b, fov)
+                sigmoid = nn.Sigmoid()
+                output = sigmoid(output).squeeze(-1) # (b, fov)
+                labels = labels.squeeze(-1) # (b, fov)
 
-        #         mask = labels != -1
-        #         mask = mask.detach().cpu().numpy()
+                mask = labels != -1
+                mask = mask.detach().cpu().numpy()
 
-        #         output = output.detach().cpu().numpy()
-        #         # roots = roots.detach().cpu().numpy().astype(int)
-        #         for i in range(len(roots)):
-        #             if roots[i] in obj_det_val_roots:
-        #                 root_to_output[roots[i]] = output[i][mask[i]]
+                output = output.detach().cpu().numpy()
+                # roots = roots.detach().cpu().numpy().astype(int)
+                for i in range(len(roots)):
+                    if roots[i] in obj_det_val_roots:
+                        root_to_output[roots[i]] = output[i][mask[i]]
 
-        #         pbar.update()
+                pbar.update()
         
         print("creating obj dataset")
         obj_det_data = ObjectDetectionDataset(config, root_to_output)
@@ -314,8 +305,10 @@ if __name__ == "__main__":
         print("time", end_time - start_time)
         
         metrics_dict = obj_det_data.__getmetrics__()
-        print("metrics at threshold 0.5", obj_det_data.__getmetrics__()[0.01])
+        print("metrics at threshold 0.01", obj_det_data.__getmetrics__()[0.01])
+        print("metrics at threshold 0.4", obj_det_data.__getmetrics__()[0.4])
         print("metrics at threshold 0.5", obj_det_data.__getmetrics__()[0.5])
+        print("metrics at threshold 0.6", obj_det_data.__getmetrics__()[0.6])
         print("metrics at threshold 0.99", obj_det_data.__getmetrics__()[0.99])
 
         # save_dir = run_dir

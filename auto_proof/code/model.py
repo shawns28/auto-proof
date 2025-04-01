@@ -172,18 +172,21 @@ class GraphTransformer(nn.Module):
 
         return x
 
-    def compute_loss(self, output, labels, confidences, dist_to_error, max_dist, class_weight, conf_weight, tolerance_weight):
+    def compute_loss(self, output, labels, confidences, dist_to_error, max_dist, class_weight, conf_weight, tolerance_weight, rank, box_cutoff, box_weight):
         mask = labels != -1 # (b, fov, 1)
         mask = mask.squeeze(-1) # (b, fov)
 
         output = output[mask].squeeze(-1) # (b * fov - buffer,)
         labels = labels[mask].squeeze(-1) # (b * fov - buffer,)
-        
         confidences = confidences[mask].squeeze(-1) # (b * fov - buffer,)
         dist_to_error = dist_to_error[mask].squeeze(-1) # (b * fov - buffer,)
+        rank = rank[mask].squeeze(-1) # (b * fov - buffer,)
         
         loss_function = nn.BCEWithLogitsLoss(reduction='none', pos_weight=class_weight)
         losses = loss_function(output, labels)
+
+        rank_mask = rank >= box_cutoff
+        losses[rank_mask] *= box_weight
 
         # Create a tolerance around labeled errors
         # There might be situations where we ignore spots where there are no errors nearby due to fov cutoff

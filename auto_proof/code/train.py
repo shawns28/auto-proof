@@ -1,7 +1,8 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import visualize
 from auto_proof.code.utils import get_root_output
-from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plots
+from auto_proof.code.pre import data_utils
+from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plot
 
 import os
 import torch
@@ -30,6 +31,7 @@ class Trainer(object):
         self.ckpt_dir = config['trainer']['ckpt_dir']
         self.save_ckpt_every = config['trainer']['save_ckpt_every']
         self.save_visual_every = config['trainer']['save_visual_every']
+        self.show_tol = config['trainer']['show_tol']
         self.batch_size = config['loader']['batch_size']
         self.data_dir = config['data']['data_dir']
         self.save_dir = f'{self.ckpt_dir}{self.run_id}/'
@@ -52,6 +54,7 @@ class Trainer(object):
         self.class_weights = torch.tensor(config['trainer']['class_weights']).float().to(self.device)
         self.conf_weight = config['trainer']['conf_weight']
         self.tolerance_weight = config['trainer']['tolerance_weight']
+        self.box_weight = config['trainer']['box_weight']
 
         ### trainings params
         self.epochs = config['optimizer']['epochs']
@@ -122,10 +125,10 @@ class Trainer(object):
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-                input, labels, confidence, dist_to_error, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidence, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
 
                 output = self.model(input, adj)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
+                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight, rank, self.box_cutoff, self.box_weight)
                 # self.run["train/loss"].append(loss)
 
                 # optimize 
@@ -163,10 +166,10 @@ class Trainer(object):
             for i, data in enumerate(self.val_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots = data[0]
-                input, labels, confidence, dist_to_error, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidence, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 output = self.model(input, adj) # (b, fov, 1)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight)
+                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
                 self.run["val/loss"].append(loss)
                 running_vloss += loss
 
@@ -216,7 +219,7 @@ class Trainer(object):
             
             metrics_dict = obj_det_data.__getmetrics__()
 
-            obj_save_path = obj_det_plots(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
+            obj_save_path = obj_det_plot(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
             self.run[f"plots/obj_precision_recall_curve"].append(neptune.types.File(obj_save_path))
 
         # Taking out the initial 0 from initialization
@@ -310,7 +313,7 @@ class Trainer(object):
             if is_proofread:
                 edit = 'proofread'
             save_path = f'{self.save_dir}{self.epoch}_{random}_{mode}_{edit}_{root}.html'
-            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, self.max_dist, save_path)
+            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, self.max_dist, self.show_tol, save_path)
             self.run[f"visuals/{self.epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
         except Exception as e:
             print("Failed visualization for root id: ", root, "error: ", e)

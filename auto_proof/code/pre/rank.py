@@ -91,8 +91,6 @@ def process_root(args):
                 new_rank = bfs(g, seed)
                 if new_rank[rep_index] < box_cutoff:
                     rep_included = True
-                else:
-                    rep_incuded = False
 
             with h5py.File(rank_path, 'a') as rank_f:
                 rank_f.create_dataset(f'rank_{box_cutoff}', data=new_rank)
