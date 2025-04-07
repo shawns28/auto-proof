@@ -1,0 +1,41 @@
+{
+    "multiprocessing": {
+        "num_chunks": 24,
+        "num_processes": 32
+    },
+    "paths": {
+        "root_path": "",
+        "features_dir": "",
+        "labels_dir": "",
+        "segclr_dir": ""
+    },
+    "client": {
+        "datastack_name": "minnie65_phase3_v1",
+        "my_token": "64df9664ce8a28852ee99167c26a9e8d",
+        "mat_version": 943
+    },
+    "features": {
+        "features": true,
+        "cutoff": 500,
+        "pos_enc_dim": 32,
+        "box_cutoff": 100
+    },
+    "labels": {
+        "labels": false,
+        "labels_mat_version": 943
+    },
+    "roots_at": {
+        "roots_at": false,
+        "roots_mat_version": 943,
+        "precomputed_343": "ss",
+        "precomputed_943": "ss"
+    },
+    "segclr": {
+        "segclr": false,
+        "segclr_mat_version": 343,
+        "segclr_proofread_version": 943,
+        "url_343": "",
+        "url_943": ""
+    }
+    
+}

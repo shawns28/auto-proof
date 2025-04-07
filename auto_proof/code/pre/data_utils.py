@@ -4,36 +4,47 @@ import pickle
 import json
 
 CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
+DATA_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/pre/data_config.json'
 
-'''
-Initializes config
-Returns:
-    config: base config
-'''
 def get_config():
+    '''
+    Initializes config
+    Returns:
+        config: base config
+    '''
     with open(CONFIG_PATH, 'r') as f:
+        config = json.load(f)
+    return config
+
+def get_data_config():
+    '''
+    Initializes data config for pre-processing
+    Returns:
+        config: data config
+    '''
+    with open(DATA_CONFIG_PATH, 'r') as f:
         config = json.load(f)
     return config
 
 '''
 Initialize client and return it as well as relevant info
-Inputs:
-    config
+Args:
+    data config
 Returns:
     client: cave client
     datastack_name: base config datastack name
     mat_version: base config materialization version
 '''
-def create_client(config):
-    datastack_name = config["data"]["datastack_name"]
-    my_token = config["data"]["my_token"]
-    mat_version = config["data"]["mat_version"]
+def create_client(data_config):
+    datastack_name = data_config["client"]["datastack_name"]
+    my_token = data_config["client"]["my_token"]
+    mat_version = data_config["client"]["mat_version"]
     client = CAVEclient(datastack_name=datastack_name, auth_token=my_token, version=mat_version)
     return client, datastack_name, mat_version
 
 '''
 Saves dictionary as pickle file at filepath
-Inputs:
+Args:
     filepath: filepath should include .pkl
     dict: dictionary to save
 '''
@@ -43,7 +54,7 @@ def save_pickle_dict(filepath, dict):
 
 '''
 Loads dictionary from pickle file at filepath and returns it
-Inputs:
+Args:
     filepath: filepath should end in .pkl
 Returns:
     dictionary that was loaded
@@ -55,7 +66,7 @@ def load_pickle_dict(filepath):
 
 '''
 Saves dictionary as json file at filepath
-Inputs:
+Args:
     filepath: filepath should include .json
     dict: dictionary to save
 '''
@@ -65,7 +76,7 @@ def save_json(filepath, dict):
 
 '''
 Loads txt file at filepath and returns it as numpy array
-Inputs:
+Args:
     filepath: filepath should end in .txt
 Returns:
     numpy array containing each line as an item
@@ -77,7 +88,7 @@ def load_txt(filepath):
 
 '''
 Saves arr as txt file at filepath
-Inputs:
+Args:
     arr: array to save each item as new line
     filepath: filepath should include .txt
 '''
@@ -88,14 +99,14 @@ def save_txt(filepath, arr):
 
 '''
 Gets the correct list of roots for that chunk
-Inputs:
+Args:
     config
     chunk_num: The chunk number or index + 1
     num_chunks: Number of total chunks to split the roots
 Returns:
     root ids
 '''
-def get_roots_chunk(config, root_ids, chunk_num, num_chunks):
+def get_roots_chunk(root_ids, chunk_num, num_chunks):
     print("chunk number is:", chunk_num)
     print("num_chunks is:", num_chunks)
     chunk_size = len(root_ids) // num_chunks
@@ -109,7 +120,7 @@ def get_roots_chunk(config, root_ids, chunk_num, num_chunks):
 
 '''
 Compares the roots from before and after and saves the different roots
-Inputs:
+Args:
     before_path
     after_path
     diff_path

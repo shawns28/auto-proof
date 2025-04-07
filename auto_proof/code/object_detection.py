@@ -79,15 +79,15 @@ class ObjectDetectionDataset(Dataset):
                 label_ccs = get_label_components(g, labels, box_cutoff_nodes)
                 
                 new_label_ccs, confidence = remove_isolated_errors(g, label_ccs, confidence)
-                if len(new_label_ccs) != len(label_ccs):
-                    with open(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/mixed_isolated_error/"}{root}', 'w') as f:
-                        pass
                 label_ccs = new_label_ccs
 
                 for threshold in self.thresholds:
                     output_ccs = get_output_components(g, threshold_to_output[threshold], confidence)
                     output_ccs, conf_fp = remove_big_output_ccs(output_ccs, labels, self.obj_det_error_cloud_ratio, box_cutoff_nodes)
                     conf_tp, conf_fn = count_shared_and_unshared(label_ccs, output_ccs)
+                    # if threshold == 0.5:
+                    #     if conf_fn > 0:
+                    #         print("root with missed error", root)
                     self.threshold_to_metrics[threshold]['conf_tp'] += conf_tp
                     self.threshold_to_metrics[threshold]['conf_fn'] += conf_fn
                     self.threshold_to_metrics[threshold]['conf_fp'] += conf_fp
@@ -223,9 +223,9 @@ def get_precision_and_recall(tp, fn, fp):
 
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
-    run_id = 'AUT-247'
+    run_id = 'AUT-255'
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 40
+    epoch = 30
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
@@ -271,7 +271,7 @@ if __name__ == "__main__":
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-                roots, input, labels, confidence, dist_to_error, adj = data
+                roots, input, labels, confidence, dist_to_error, rank, adj = data
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 input = input.float().to(device)
                 labels = labels.float().to(device)
@@ -291,7 +291,6 @@ if __name__ == "__main__":
                 for i in range(len(roots)):
                     if roots[i] in obj_det_val_roots:
                         root_to_output[roots[i]] = output[i][mask[i]]
-
                 pbar.update()
         
         print("creating obj dataset")

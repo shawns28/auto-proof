@@ -121,7 +121,8 @@ def visualize_root(stuff):
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
     # run_id = 'AUT-215'
-    run_id = 'AUT-247'
+    run_id = 'AUT-255'
+    epoch = 30
     run_dir = f'{ckpt_dir}{run_id}/'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250212_125759/model_1.pt'
     # ckpt_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/20250215_212005/model_34.pt'
     # ckpt_path = f'{run_dir}model_55.pt'
-    ckpt_path = f'{run_dir}model_40.pt'
+    ckpt_path = f'{run_dir}model_{epoch}.pt'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict)
@@ -149,18 +150,20 @@ if __name__ == "__main__":
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135463333789, 864691135778235581, 864691135463333789, 864691135778235581]
     # roots = [864691135937424949]
-    roots = ['864691136041340246_000']
-    roots = ['864691135463333789_000']
-    roots = ['864691135439772402_000']
-    roots = ['864691135191257833_000']
+    # roots = ['864691136041340246_000']
+    # roots = ['864691135463333789_000']
+    # roots = ['864691135439772402_000']
+    # roots = ['864691135191257833_000']
     # roots = ['864691135490886887_000']
-    roots = ['864691136521643153_000']
+    # roots = ['864691136521643153_000']
     # roots = [864691135373853640, 864691135658276738, 864691135684548279, 864691135684548023, 864691135404040430, 864691135065359940, 864691135386905985, 864691135404090350, 864691135396807713, 864691135387767681, 864691135341705649, 864691135446000274, 864691135947108705, 864691135947108193, 864691135447045460, 864691135359346776, 864691135987462147]
     # roots = [864691135684548279]
     # roots = [864691135396807713]
     # roots = [864691135989085184, 864691135683792114, 864691136483519276, 864691135571609125, 864691135876419923, 864691136310246234, 864691136009015212, 864691135697685269, 864691136266911476]
     # Roots that are sus because conf and error are similar but not exact
     # roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
+    roots = ['864691135571361317_000', '864691135991989185_000', '864691136952448223_000', '864691136296738587_000', '864691135855823662_000', '864691136619551117_000', '864691136558482594_000', '864691136388405623_000']
+    roots = ['864691135472212274_000', '864691135615918697_000', '864691136736838510_000', '864691136286727107_000', '864691135538252914_000', '864691135517565322_000', '864691135987088387_000', '864691135952189475_000']
     max_dist = config['trainer']['max_dist']
     # stuff = [(model, device, data, 864691135463333789), (model, device, data, 864691135778235581), (model, device, data, 864691135463333789), (model, device, data, 864691135778235581)]
     # num_processes = len(stuff)
@@ -180,7 +183,7 @@ if __name__ == "__main__":
         num_initial_vertices = data.get_num_initial_vertices(root)
         print("num_initial_vertice", num_initial_vertices, "for root", root)
         if num_initial_vertices < config['trainer']['visualize_cutoff']:
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt40_250_fov.html'
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/missed_errors_255/{root}_ckpt{epoch}_{config['loader']['fov']}.html'
             print("getting root output")
             vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
             print("is_proofread", is_proofread)

@@ -1,10 +1,4 @@
 {
-    "model": {
-        "num_classes": 1,
-        "dim": 32,
-        "depth": 7,
-        "n_head": 8
-    },
     "data": {
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/",
         "features_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/",
@@ -17,25 +11,20 @@
         "test_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/test_roots_46188_69_conv.txt",
         "proofread_at_mat_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt",
         "obj_det_val_path":  "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/conf_no_error_in_box_roots_val.txt",
-        "features_sharded_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/sharded_features_10000_gzip_4/",
-        "cutoff": 1000,
-        "num_rand_seeds": 2,
-        "datastack_name": "minnie65_phase3_v1",
-        "my_token": "64df9664ce8a28852ee99167c26a9e8d",
-        "mat_version": 943,
-        "num_chunks": 24,
-        "num_shards": 10000,
-        "shard_features": false,
-        "is_proofread": false,
-        "pos_enc_dim": 32,
-        "box_cutoff": 100
+        "mat_version": 943
     },
     "loader": {
         "num_workers": 32,
         "prefetch_factor": 0,
         "batch_size": 32,
-        "fov": 250,
+        "fov": 500,
         "feat_dim": 36
+    },
+    "model": {
+        "num_classes": 1,
+        "dim": 32,
+        "depth": 7,
+        "n_head": 8
     },
     "trainer": {
         "ckpt_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/",

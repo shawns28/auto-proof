@@ -24,13 +24,15 @@ from auto_proof.code.connectomics.sharding import md5_shard
 class EmbeddingReader:
   """Reader to load and parse embedding data from sharded ZIP archives."""
 
-  def __init__(self, filesystem, zipdir: str, sharder):
+  def __init__(self, filesystem, zipdir: str, sharder, num_shards, bytewidth):
     self._filesystem = filesystem  # Provides open(path) method.
     self._zipdir = zipdir
     self._sharder = sharder
+    self._num_shards = num_shards
+    self._bytewidth = bytewidth
 
   def _get_csv_data(self, seg_id: int) -> str:
-    shard = self._sharder(seg_id)
+    shard = self._sharder(seg_id, self._num_shards, self._bytewidth)
     zip_path = os.path.join(self._zipdir, f'{shard}.zip')
     with self._filesystem.open(zip_path) as f:
       with zipfile.ZipFile(f) as z:

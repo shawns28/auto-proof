@@ -106,7 +106,6 @@ def skeletonize(config):
             try:
                 skel_edges = np.array(skel_dict['edges'])
                 skel_vertices = np.array(skel_dict['vertices'])
-                skel_compartment = np.array(skel_dict['compartment'])
                 skel_radii = np.array(skel_dict['radius'])
             except Exception as e:
                 print("failed for root id: ", root_id, "error: ", e)
@@ -139,7 +138,6 @@ def skeletonize(config):
                 ranks[i][ranks[i] >= cutoff] = np.iinfo(np.int32).max
 
             new_skel_vertices = skel_vertices[mask_indices]
-            new_skel_compartment = skel_compartment[mask_indices]
             new_skel_radii = skel_radii[mask_indices]
 
             new_edges = prune_edges(mask_indices, skel_edges)
