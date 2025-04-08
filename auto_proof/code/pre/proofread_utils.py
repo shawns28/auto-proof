@@ -14,90 +14,53 @@ import shutil
 import glob
 import multiprocessing
 
-
-'''
-TODO: Fill in all of the methods
-'''
-def convert_proofread_csv_to_txt(config, mat_version):
-    data_dir = config['data']['data_dir']
-    proofread_csv = f'{data_dir}proofread_{mat_version}.csv'
+def convert_proofread_csv_to_txt(data_config, mat_version):
+    """Converts proofread csv to txt.
+    
+    Args:
+        data_config
+        mat_version: Identifier for which proofread csv to convert
+    Returns:
+        roots converted
+    """
+    proofread_csv = data_config['proofread'][f'{mat_version}_csv']
     df = pd.read_csv(proofread_csv)
     filtered_df = df[df['status_axon'] != 'non']
     root_ids = filtered_df['root_id']
     root_ids_array = np.array(root_ids)
-    data_utils.save_txt(f'{data_dir}root_ids/proofread_{mat_version}.txt', root_ids_array)
+    proofread_root_path = data_config['proofread'][f'{mat_version}_path']
+    data_utils.save_txt(proofread_root_path, root_ids_array)
+    return root_ids
 
-'''
-TODO: No longer works since I took away proofread path
-'''
-def proofread_future_roots(config):
-    proofread_roots = data_utils.load_txt(config['data']['proofread_path'])
-    for root in proofread_roots:
-        skel_hf_path = f'{config['data']['proofread_features_dir']}{root}.hdf5'
-        with h5py.File(skel_hf_path, 'a') as skel_hf:
-            if 'root_943' not in skel_hf:
-                num_vertices = skel_hf['num_vertices'][()]
-                arr = np.full(num_vertices, root)  
-                skel_hf.create_dataset('root_943', data=arr)
-
-def combine_roots(previous_root_path, new_root_path, combined_root_path):
-    previous_roots = data_utils.load_txt(previous_root_path)
-    new_roots = data_utils.load_txt(new_root_path)
-    combined_roots = np.concatenate((previous_roots, new_roots))
-    print(combined_roots[0], " ", combined_roots[-1])
-    data_utils.save_txt(combined_root_path, combined_roots)
-
-'''
-Adds new features into previous features dir
-'''
-def combine_feat_dir(previous_feat_dir, new_feat_dir):
-    source = new_feat_dir
-    destination = previous_feat_dir
+def combine_proofread_roots(mat_dict):
+    """Combines the roots from each mat version into one unique inclusive list.
     
-    # gather all files
-    allfiles = os.listdir(source)
-    
-    # iterate on all files to move them to destination folder
-    for f in allfiles:
-        src_path = os.path.join(source, f)
-        dst_path = os.path.join(destination, f)
-        shutil.move(src_path, dst_path)
+    Args:
+        mat_dict: (mat version: proofread roots at mat version)
+    Returns:
+        list of combined inclusive roots
+    """
+    combined_set = set()
+    for mat_version in mat_dict:
+        combined_set.update(mat_dict[mat_version])
+    return list(combined_set)
 
-# NOTE: This is bad style but I'm doing for the multiprocessing
-config = data_utils.get_config()
-PROOFREAD_ROOTS = data_utils.load_txt(config['data']['proofread_at_mat_path'])
-def add_proofread_feature(config):
-    root_paths = glob.glob(f'{config['data']['features_dir']}*')
-    roots = data_utils.load_txt(config['data']['root_path'])
-    proofread_roots = data_utils.load_txt(config['data']['proofread_at_mat_path'])
-    num_processes = config['loader']['num_workers']
+def make_copies_of_roots(roots, copy_count):
+    """Makes copies of each root and adds identifier.
 
-    with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(root_paths)) as pbar:
-        for _ in pool.imap_unordered(__process_add_proofread_feature__, root_paths):
-            pbar.update()
-
-def __process_add_proofread_feature__(root_path):
-    with h5py.File(root_path, 'r+') as f:
-        if 'is_proofread' not in f:
-            root = f['root_id'][()]
-            if root in PROOFREAD_ROOTS:
-                f.create_dataset('is_proofread', data=True)
-            else:
-                f.create_dataset('is_proofread', data=False)
-
-
-if __name__ == "__main__":
-    mat_version = 943
-    config = data_utils.get_config()
-    # convert_proofread_csv_to_txt(config, mat_version)
-    # proofread_future_roots(config)
-    # previous_root_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_label_roots_459972.txt"
-    # new_root_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/post_labels_proofread_roots.txt"
-    # combined_root_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots.txt"
-    # combine_roots(previous_root_path, new_root_path, combined_root_path)
-    # previous_feat_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/"
-    # new_feat_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/proofread_features/"
-    # combine_feat_dir(previous_feat_dir, new_feat_dir)
-
-    add_proofread_feature(config)
-        
+    Args:
+        roots: proofread roots
+        copy_count: Number of copies to have total < 100
+    Returns:
+        roots with copies and identifiers for each copy index
+    """
+    new_roots = []
+    for root in roots:
+        for i in range(min(copy_count, 10)):
+            new_str = str(root) + '_00' + str(i)
+            new_roots.append(new_str)
+        if copy_count > 10:
+            for i in range(10, copy_count):
+                new_str = str(root) + '_0' + str(i)
+                new_roots.append(new_str)
+    return new_roots

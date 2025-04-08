@@ -4,38 +4,62 @@
         "num_processes": 32
     },
     "paths": {
-        "root_path": "",
-        "features_dir": "",
-        "labels_dir": "",
-        "segclr_dir": ""
+        "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/"
     },
     "client": {
         "datastack_name": "minnie65_phase3_v1",
         "my_token": "64df9664ce8a28852ee99167c26a9e8d",
-        "mat_version": 943
+        "mat_version_start": 343,
+        "mat_version_end": 943
+    },
+    "raw_edits": {
+        "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.feather",
+        "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.npy",
+        "x_res": 8,
+        "y_res": 8,
+        "z_res": 40
+    },
+    "proofread": {
+        "943_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.txt",
+        "1300_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.txt",
+        "combined_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300.txt",
+        "943_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.csv",
+        "1300_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.csv",
+        "mat_versions": [943, 1300],
+        "copy_count": 20,
+        "pre_root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/pre_edit_roots_list.txt",
+        "post_root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_proofread_roots.txt"
     },
     "features": {
-        "features": true,
+        "pre_root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt",
+        "root_to_rep": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/dicts_343_1300/root_id_to_rep_coords.pkl",
+        "post_root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_feature_roots.txt",
+        "skel": true,
+        "map_pe": true,
+        "dist": true,
         "cutoff": 500,
+        "skeleton_version": 4,
         "pos_enc_dim": 32,
-        "box_cutoff": 100
+        "box_cutoff": 100,
+        "features_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/features/"
     },
     "labels": {
-        "labels": false,
-        "labels_mat_version": 943
+        "labels": true,
+        "labels_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/labels/"
     },
     "roots_at": {
         "roots_at": false,
-        "roots_mat_version": 943,
+        "roots_mat_version": 1300,
         "precomputed_343": "ss",
-        "precomputed_943": "ss"
+        "precomputed_943": "ss",
+        "precomputed_1300": "ss"
     },
     "segclr": {
         "segclr": false,
-        "segclr_mat_version": 343,
-        "segclr_proofread_version": 943,
         "url_343": "",
-        "url_943": ""
+        "url_943": "",
+        "url_1300": "",
+        "segclr_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_emb/"
     }
     
 }

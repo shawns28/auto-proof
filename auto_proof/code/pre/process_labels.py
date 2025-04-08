@@ -32,7 +32,7 @@ def main(data_config):
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
 
     num_processes = data_config['multiprocessing']['num_processes']
-    client, _, _ = data_utils.create_client(data_config)
+    client = data_utils.create_client(data_config)
     args_list = list([(root, config, data_config, client) for root in roots])
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
         for _ in pool.imap_unordered(process_root, args_list):

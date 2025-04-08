@@ -27,3 +27,6 @@ Need to run conda install -c conda-forge trame in order to save html file from p
 Everything works now I just needed to run conda install pip first so that pip works in the conda env instaed of outside
 
 It actually doesn't work when I actually try to use graph tool
+
+cv environment or gt environment
+1. First fill out the data config with x paths and then run raw edits - 143m48.599s for 343 - 1300

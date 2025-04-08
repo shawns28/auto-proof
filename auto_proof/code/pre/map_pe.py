@@ -14,77 +14,27 @@ import torch
 import multiprocessing
 import glob
 
-'''
-Creates Maximal Axis Projection (MAP) Positional Encodings
+def map_pe_wrapper(pos_enc_dim, root, edges):
+    """Creates Maximal Axis Projection (MAP) Positional Encodings
 
-Copied from, make sure to cite:
-https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
-'''
-def create_map_pe(config, map_pes_dir):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--chunk_num", help="chunk num")
-    parser.add_argument("-n", "--num_workers", help="num workers")
-    args = parser.parse_args()
-    if args.num_workers:
-        config['loader']['num_workers'] = int(args.num_workers)
-    chunk_num = 1
-    num_chunks = config['data']['num_chunks']
-    if args.chunk_num:
-        chunk_num = int(args.chunk_num)
-    else: # No chunking
-        num_chunks = 1
-
-    roots = data_utils.load_txt(config['data']['root_path'])
-    # roots = data_utils.load_txt('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/missing_map_pe_roots.txt')
-    # roots = data_utils.load_txt('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/error_map_pe_roots.txt')
-    # roots = [864691135937424949] # size 7
-    # roots = [864691135778235581] # size 921
-    # roots = [864691136443843459]
-    # roots = [864691134918370314]
-    # roots = [864691135937424949, 864691135778235581, 864691134918370314]
-    roots = data_utils.get_roots_chunk(config, roots, chunk_num=chunk_num, num_chunks=num_chunks)
-
-    num_processes = config['loader']['num_workers']
-    features_directory = config['data']['features_dir']
-    args_list = list([(root, features_directory, map_pes_dir) for root in roots])
-
-    with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
-        for _ in pool.imap_unordered(process_root, args_list):
-            pbar.update()            
-
-    # roots_2 = [864691135937424949, 864691135778235581, 864691134918370314]
-    # for root in roots_2:
-    #     map_pe_path = f'{map_pes_dir}map_{root}.hdf5'
-    #     with h5py.File(map_pe_path, 'a') as map_f:
-    #         new_map_pe = map_f['map_pe'][:]
-    #         print("new map pe", new_map_pe)
-
-def process_root(args):
+    Copied from, make sure to cite:
+    https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
+    """
     try:
-        root, features_directory, map_pes_dir = args
-        # print("root: ", root)
-        map_pe_path = f'{map_pes_dir}map_{root}.hdf5'
-        # Skip already processed roots
-        if os.path.exists(map_pe_path):
-            return
-
-        root_feat_path = f'{features_directory}{root}.hdf5'
-        with h5py.File(root_feat_path, 'r') as f:
-            edges = f['edges'][:]
-            g = gt.Graph(edges, directed=False)
-            map_pe = map_positional_encoding(g, True, True, True)
-            # print("map pe:", map_pe)
-            # print("map pe shape", map_pe.shape)
+        g = gt.Graph(edges, directed=False)
+        map_pe = map_positional_encoding(g, True, True, True, pos_enc_dim)
+        return True, None, map_pe.numpy()
             
-            with h5py.File(map_pe_path, 'a') as map_f:
-                map_f.create_dataset('map_pe', data=map_pe.numpy())
     except Exception as e:
-        return
+        return False, e, None
 
 # There are different versions of the normalized adjency matrix that I could use
-def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True):
-    pos_enc_dim = config['data']['pos_enc_dim']
-    
+def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True, pos_enc_dim=32):
+    """Creates Maximal Axis Projection (MAP) Positional Encodings
+
+    Copied from, make sure to cite:
+    https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
+    """
     A = gt.adjacency(g).astype(np.double)
     A = torch.from_numpy(A.toarray()).double()
     # print("A", A)
@@ -155,8 +105,11 @@ def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_
 # There are different versions of the normalized adjency matrix that I could use
 # Normalized Laplacian, Normalized Adjacency, Normalized Adjacency with pre self loop/post self loop
 # Currenty this does the normalized adjacency with post self loop like in
-# https://github.com/PKU-ML/LaplacianCanonization/blob/4f40a2236707fb6f604aede8c3a8f12813c7db92/data/map.py#L91
 def normalize_adjacency(A):
+    """Normalize adjacency matrix
+
+    https://github.com/PKU-ML/LaplacianCanonization/blob/4f40a2236707fb6f604aede8c3a8f12813c7db92/data/map.py#L91
+    """
     n = A.shape[0]
     assert list(A.shape) == [n, n]
 
@@ -168,26 +121,26 @@ def normalize_adjacency(A):
     A += torch.eye(n)
     return A
 
-'''
-Eliminating sign ambiguity of the input eigenvectors.
-
->>> U = Tensor([[1, -1, 4], [2, -2, 5], [3, -3, -6]])
->>> unique_sign(U)
-tensor([[ 1.,  1.,  4.],
-        [ 2.,  2.,  5.],
-        [ 3.,  3., -6.]])
->>> U = Tensor([[2, -2, 5], [3, -3, -6], [1, -1, 4]])
->>> unique_sign(U)
-tensor([[ 2.,  2.,  5.],
-        [ 3.,  3., -6.],
-        [ 1.,  1.,  4.]])
-
-Input: 
-    Tensor of shape [n, d]. Each column of U is an eigenvector.
-Return: 
-    Tensor of shape [n, d].
-'''
 def unique_sign(U):
+    """
+    Eliminating sign ambiguity of the input eigenvectors.
+
+    >>> U = Tensor([[1, -1, 4], [2, -2, 5], [3, -3, -6]])
+    >>> unique_sign(U)
+    tensor([[ 1.,  1.,  4.],
+            [ 2.,  2.,  5.],
+            [ 3.,  3., -6.]])
+    >>> U = Tensor([[2, -2, 5], [3, -3, -6], [1, -1, 4]])
+    >>> unique_sign(U)
+    tensor([[ 2.,  2.,  5.],
+            [ 3.,  3., -6.],
+            [ 1.,  1.,  4.]])
+
+    Args: 
+        Tensor of shape [n, d]. Each column of U is an eigenvector.
+    Return: 
+        Tensor of shape [n, d].
+    """
     n, d = U.shape
     for i in range(d):
         u = U[:, i].view(n, 1)
@@ -222,15 +175,14 @@ def unique_sign(U):
         U[:, i] = u_0
     return U
 
-'''
-Eliminating basis ambiguity of the input eigenvectors.
-
-Input:
-    U_i: Tensor of shape [n, d]. Each column of U is an eigenvector.
-Return:
-    Tensor of shape [n, d].
-'''
 def unique_basis(U_i):
+    """Eliminating basis ambiguity of the input eigenvectors.
+
+    Args:
+        U_i: Tensor of shape [n, d]. Each column of U is an eigenvector.
+    Return:
+        Tensor of shape [n, d].
+    """
     # print("Entering unique basis")
     n, d = U_i.shape
     E = torch.eye(n)
@@ -265,25 +217,25 @@ def unique_basis(U_i):
         u_perp = find_complementary_space(U_i, u_span)
     return U_0
 
-'''
-Find the orthogonal complementary space of u_span in the linear space U.
-
->>> U = Tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
->>> u_span = Tensor([[0, 0], [1, 0], [0, 0], [0, 0], [0, 1]])
->>> find_complementary_space(U, u_span)
-tensor([[1., 0.],
-        [0., 0.],
-        [0., 0.],
-        [0., 1.],
-        [0., 0.]])
-
-Input:
-    U: Tensor of shape [n, d].
-    u_span: Tensor of shape [n, s], where s <= d.
-Return: 
-    Tensor of shape [n, d - s].
-'''
 def find_complementary_space(U, u_span):
+    """
+    Find the orthogonal complementary space of u_span in the linear space U.
+
+    >>> U = Tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
+    >>> u_span = Tensor([[0, 0], [1, 0], [0, 0], [0, 0], [0, 1]])
+    >>> find_complementary_space(U, u_span)
+    tensor([[1., 0.],
+            [0., 0.],
+            [0., 0.],
+            [0., 1.],
+            [0., 0.]])
+
+    Args:
+        U: Tensor of shape [n, d].
+        u_span: Tensor of shape [n, s], where s <= d.
+    Return: 
+        Tensor of shape [n, d - s].
+    """
     n, d = U.shape
     s = u_span.shape[1]
     u_base = u_span.clone()
@@ -299,20 +251,20 @@ def find_complementary_space(U, u_span):
     u_perp = u_base[:, s:d]
     return u_perp
 
-'''
-Orthogonalize a set of linear independent vectors using Gram–Schmidt process.
-
->>> U = torch.nn.functional.normalize(torch.randn(5, 3), dim=0)
->>> U = orthogonalize(U)
->>> torch.allclose(U.T @ U, torch.eye(3), atol=1e-06)
-True
-
-Input:
-    U: Tensor of shape [n, d], d <= n.
-Return:
-    Tensor of shape [n, d].
-'''
 def orthogonalize(U):
+    """
+    Orthogonalize a set of linear independent vectors using Gram–Schmidt process.
+
+    >>> U = torch.nn.functional.normalize(torch.randn(5, 3), dim=0)
+    >>> U = orthogonalize(U)
+    >>> torch.allclose(U.T @ U, torch.eye(3), atol=1e-06)
+    True
+
+    Args:
+        U: Tensor of shape [n, d], d <= n.
+    Return:
+        Tensor of shape [n, d].
+    """
     Q, R = torch.linalg.qr(U)
     return Q
 

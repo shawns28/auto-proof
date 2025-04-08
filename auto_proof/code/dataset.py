@@ -39,6 +39,7 @@ class AutoProofDataset(Dataset):
         random_index = np.random.randint(0, len(self.roots))
         return self.roots[random_index]
     
+    # TODO: Change how this works because it won't work anymore
     def get_is_proofread(self, root):
         data_path = f'{self.features_dir}{root}.hdf5'
         with h5py.File(data_path, 'r') as f:

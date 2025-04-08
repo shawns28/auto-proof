@@ -6,7 +6,7 @@ from auto_proof.code.connectomics.sharding import md5_shard
 import gcsfs
 
 filesystem = gcsfs.GCSFileSystem(token='anon')
-url = 'gs://iarpa_microns/minnie/minnie65/embeddings_m943/segclr_nm_coord_public_offset_csvzips/'
+url = 'gs://iarpa_microns/minnie/minnie65/embeddings_m1300/segclr_nm_coord_public_offset_csvzips/'
 
 num_shards = 50_000
 bytewidth = 8

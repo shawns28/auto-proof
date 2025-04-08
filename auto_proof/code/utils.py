@@ -45,7 +45,7 @@ def get_root_output(model, device, data, root):
         edges = adjency_to_edge_list_torch_skip_diag(adj)
 
         data_config = data_utils.get_data_config()
-        client, _, _ = data_utils.create_client(data_config)  
+        client = data_utils.create_client(data_config)  
         cv = client.info.segmentation_cloudvolume(progress=False)
         root_without_num = int(root[:-4]) # Removing _000 for mesh retrieval
         mesh = cv.mesh.get(

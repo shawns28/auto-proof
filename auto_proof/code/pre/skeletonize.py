@@ -14,10 +14,9 @@ import argparse
 import glob
 
 
-'''
-Custom class for graph tool to determine the rank using bfs
-'''
+
 class Visitor(gt.BFSVisitor):
+    """Custom class for graph tool to determine the rank using bfs"""
     def __init__(self, vp_rank):
         self.vp_rank = vp_rank
         self.rank = -1
@@ -26,141 +25,68 @@ class Visitor(gt.BFSVisitor):
         self.rank += 1
         self.vp_rank[u] = self.rank
 
-'''
-NOTE/TODO: Doesn't take into account box cutoff so need to add that in
-Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
-which are pulled from cave client for the root. Additionally saves successful roots to txt.
-Input:
-    config
-Flags:
-    -c, --chunk_num: This will chunk the root_ids for multi node runs if provided
-'''
-def skeletonize(config):
-    # TODO: Make this compatible with running the script in pre_process_main.py
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--chunk_num", help="chunk num")
-    args = parser.parse_args()
-    chunk_num = 1
-    num_chunks = config['data']['num_chunks']
-    if args.chunk_num:
-        chunk_num = int(args.chunk_num)
-    else: # No chunking
-        num_chunks = 1
+def get_skel(datastack_name, root, client):
+    """NOTE/TODO: 
+    Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
+    which are pulled from cave client for the root. Additionally saves successful roots to txt.
+    """
+    retries = 2
+    delay = 1
+    root_id_without_num = int(root[:-4])
+    for attempt in range(0, retries + 1):
+        try: 
+            skel_dict = client.skeleton.get_skeleton(root_id=root_id_without_num, skeleton_version=data_config['features']['skeleton_version'], datastack_name=datastack_name, output_format='dict')
+            return True, None, skel_dict
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(delay)
+                continue
+            else:
+                return False, e, None
+    return False, None, None # Shouldn't enter
 
-    root_ids = data_utils.load_txt(config['data']['root_path'])
-    root_ids = data_utils.get_roots_chunk(config, root_ids, chunk_num=chunk_num, num_chunks=num_chunks)
-    # root_ids = data_utils.load_txt(f'{data_directory}root_ids/unprocessed_roots.txt')
-    # root_ids = ['864691135359413848_001', '864691135359413848_002']
-    # root_ids = [864691136272969918, 864691135776571232, 864691135474550843, 864691135445638290, 864691136899949422, 864691136175092486, 864691135937424949]
-    # root_ids = [864691135445639826, 864691135446597204]
-    # root_ids = [864691131630728977, 864691131757470881]
-
-    is_proofread = config['data']['is_proofread']
-
-    client, datastack_name, mat_version = data_utils.create_client(config)
-    data_directory = config['data']['data_dir']
-    features_directory = config['data']['features_dir']
-
-    if not os.path.isdir(features_directory):
-        os.makedirs(features_directory)
+def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
+    """NOTE/TODO: 
+    Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
+    which are pulled from cave client for the root. Additionally saves successful roots to txt.
+    """ 
+    
+    try:
+        skel_edges = np.array(skel_dict['edges'])
+        skel_vertices = np.array(skel_dict['vertices'])
+        skel_radii = np.array(skel_dict['radius'])
+    except Exception as e:
+        return False, e, None
 
     if not is_proofread:
-        root_id_to_rep_coords_path = f'{data_directory}dicts/root_id_to_rep_coords_{mat_version}.pkl'
-        root_id_to_rep_coords = data_utils.load_pickle_dict(root_id_to_rep_coords_path)
+        rep_index, _ = get_closest(skel_vertices, rep_coord)
+    else:
+        rep_index = np.random.randint(0, len(skel_vertices))
 
-    cutoff = config["data"]["cutoff"]
-    num_rand_seeds = config["data"]["num_rand_seeds"]    
+    try:
+        g = gt.Graph(skel_edges, directed=False)
+    except Exception as e:
+        return False, e, None
+
+    skel_len = len(skel_vertices)
+    rank = create_rank(g, rep_index, skel_len, box_cutoff)
+    mask = rank < cutoff
+    mask = np.where(mask == True)[0]
+
+    rank = rank[mask]
+    new_skel_vertices = skel_vertices[mask]
+    new_skel_radii = skel_radii[mask]
+
+    new_edges = prune_edges(mask, skel_edges)
     
-    with tqdm(total=len(root_ids)) as pbar:
-        for root_id in root_ids:
-            skel_hf_path = f'{features_directory}{root_id}.hdf5'
-            # Skip already processed roots
-            if os.path.exists(skel_hf_path):
-                pbar.update()
-                continue
+    feature_dict = {}
+    feature_dict['num_initial_vertices'] = len(skel_vertices)
+    feature_dict['vertices'] = new_skel_vertices
+    feature_dict['edges'] = new_edges
+    feature_dict['radius'] = new_skel_radii
+    feature_dict['rank'] = rank
 
-            # NOTE: It would seem that the skeleton service has changed so skeletonizing proofread vs pre-edit
-            # would have been different code. Check commit history for previous version.
-            retries = 2
-            delay = 1
-            failed = False
-            root_id_without_num = int(root_id[:-4])
-            for attempt in range(1, retries + 1):
-                try: 
-                    skel_dict = client.skeleton.get_skeleton(root_id=root_id_without_num, skeleton_version=4, datastack_name=datastack_name, output_format='dict')
-                    break
-                except Exception as e:
-                    if attempt < retries:
-                        print("Couldn't retrieve skeleton for root id: ", root_id_without_num, ". Attempt ", attempt, "/", retries, "Error: ", e)
-                        time.sleep(delay)
-                        continue
-                    else:
-                        print("Failed to retrieve skeleton for root id: ", root_id_without_num, ". Skipping this root id") 
-                        failed = True
-                        pbar.update()
-                        continue
-            
-            if failed:
-                continue
-
-            try:
-                skel_edges = np.array(skel_dict['edges'])
-                skel_vertices = np.array(skel_dict['vertices'])
-                skel_radii = np.array(skel_dict['radius'])
-            except Exception as e:
-                print("failed for root id: ", root_id, "error: ", e)
-                pbar.update()
-                continue
-
-            # ALL OF THE RANK RELATED LOGIC IS DEPRECATED BECAUSE IT DOESN'T TAKE INTO ACCOUNT BOX CUTOFF
-            # TODO: update the code so that it works better for everything
-            rep_index = np.random.randint(0, len(skel_vertices))
-            if not is_proofread:
-                rep_coord = root_id_to_rep_coords[root_id]
-                rep_index, _ = get_closest(skel_vertices, rep_coord)
-                print("rep_coord", rep_coord)
-                print("rep_index", rep_index)
-                print("vertices", skel_vertices)
-
-            try:
-                g = gt.Graph(skel_edges, directed=False)
-            except Exception as e:
-                print("failed to create graph for root id: ", root_id, "error: ", e)
-                pbar.update()
-                continue
-
-            skel_len = len(skel_vertices)
-            ranks = create_ranks(cutoff, g, rep_index, num_rand_seeds, skel_len)
-            mask_indices = create_mask_indices(ranks, cutoff, num_rand_seeds)
-
-            for i in range(len(ranks)):
-                ranks[i] = ranks[i][mask_indices]
-                ranks[i][ranks[i] >= cutoff] = np.iinfo(np.int32).max
-
-            new_skel_vertices = skel_vertices[mask_indices]
-            new_skel_radii = skel_radii[mask_indices]
-
-            new_edges = prune_edges(mask_indices, skel_edges)
-
-            # NOTE: Removed compartment
-            features_dict = {
-                'root_id': root_id_without_num,
-                'num_initial_vertices': len(skel_vertices),
-                'num_vertices': len(new_skel_vertices),
-                'cutoff': cutoff,
-                'vertices': new_skel_vertices,
-                'edges': new_edges,
-                'radius': new_skel_radii
-            }
-            
-            for i in range(len(ranks)):
-                features_dict[f'rank_{i}'] = ranks[i]
-
-            # Save features to hdf5 file
-            with h5py.File(skel_hf_path, 'a') as skel_hf:
-                for feature in features_dict:
-                    skel_hf.create_dataset(feature, data=features_dict[feature])
-            pbar.update()
+    return True, None, feature_dict
 
 def prune_edges(mask_indices, skel_edges):
     orig_to_new = {value: index for index, value in enumerate(mask_indices)}
@@ -173,26 +99,14 @@ def prune_edges(mask_indices, skel_edges):
             edge_mask[i] = 1
     return skel_edges[edge_mask.astype(bool)]
 
-def create_mask_indices(ranks, cutoff, num_rand_seeds):
-    mask = ranks[0] < cutoff
-    for i in range(num_rand_seeds):
-        curr_mask = ranks[i + 1] < cutoff
-        mask = np.logical_or(mask, curr_mask)
-    return np.where(mask == 1)[0]
-
-def create_ranks(cutoff, g, rep_index, num_rand_seeds, skel_len):
-    ranks = []
-    rank_arr = bfs(g, rep_index)
-    ranks.append(rank_arr)
-    for _ in range(num_rand_seeds):
-        rep_included = False
-        while not rep_included:
-            seed = np.random.randint(skel_len)
-            rank_arr = bfs(g, seed)
-            if rank_arr[rep_index] < cutoff:
-                rep_included = True
-                ranks.append(rank_arr)
-    return ranks
+def create_rank(g, rep_index, skel_len, box_cutoff):
+    rep_included = False
+    while not rep_included:
+        seed = np.random.randint(skel_len)
+        rank_arr = bfs(g, seed)
+        if rank_arr[rep_index] < box_cutoff:
+            rep_included = True
+    return rank_arr
 
 # NOTE: This will run bfs on the entire graph and won't do early termination which would be faster
 def bfs(g, seed_index):
