@@ -25,17 +25,17 @@ class Visitor(gt.BFSVisitor):
         self.rank += 1
         self.vp_rank[u] = self.rank
 
-def get_skel(datastack_name, root, client):
+def get_skel(datastack_name, skeleton_version, root, client):
     """NOTE/TODO: 
     Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
     which are pulled from cave client for the root. Additionally saves successful roots to txt.
     """
     retries = 2
-    delay = 1
+    delay = 5
     root_id_without_num = int(root[:-4])
     for attempt in range(0, retries + 1):
         try: 
-            skel_dict = client.skeleton.get_skeleton(root_id=root_id_without_num, skeleton_version=data_config['features']['skeleton_version'], datastack_name=datastack_name, output_format='dict')
+            skel_dict = client.skeleton.get_skeleton(root_id=root_id_without_num, skeleton_version=skeleton_version, datastack_name=datastack_name, output_format='dict')
             return True, None, skel_dict
         except Exception as e:
             if attempt < retries:
@@ -50,7 +50,7 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
     Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
     which are pulled from cave client for the root. Additionally saves successful roots to txt.
     """ 
-    
+
     try:
         skel_edges = np.array(skel_dict['edges'])
         skel_vertices = np.array(skel_dict['vertices'])

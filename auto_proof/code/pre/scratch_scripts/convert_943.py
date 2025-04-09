@@ -44,24 +44,7 @@ def convert(data):
             new_feat_f.create_dataset('num_initial_vertices', data=num_initial_vertices)
 
 
-current_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023.txt")
-proofread_943_changed = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300_changed.txt")
-
-result = np.setdiff1d(current_roots, proofread_943_changed)
-print(len(current_roots))
-print(len(proofread_943_changed))
-print(len(result))
-
-new_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_proofread_roots.txt")
-result = [str(root) + '_000' for root in result]
-new_root_diff = np.setdiff1d(new_roots, result)
-print(len(new_roots))
-print(len(new_root_diff))
-data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt", new_root_diff)
-
-result = np.intersect1d(result, new_roots)
-print(len(result))
-data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/343_943.txt", result)
+roots = data_utils.load_txt()
 
 new_feature_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/features/"
 og_feature_dir =  "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/"

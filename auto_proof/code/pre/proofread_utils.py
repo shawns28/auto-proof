@@ -1,18 +1,7 @@
 from auto_proof.code.pre import data_utils
 
-from caveclient import CAVEclient
-import os
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-import h5py
-import json
-import sys
-import time
-import os
-import shutil
-import glob
-import multiprocessing
 
 def convert_proofread_csv_to_txt(data_config, mat_version):
     """Converts proofread csv to txt.
@@ -27,6 +16,7 @@ def convert_proofread_csv_to_txt(data_config, mat_version):
     df = pd.read_csv(proofread_csv)
     filtered_df = df[df['status_axon'] != 'non']
     root_ids = filtered_df['root_id']
+    root_ids = [str(root) for root in root_ids]
     root_ids_array = np.array(root_ids)
     proofread_root_path = data_config['proofread'][f'{mat_version}_path']
     data_utils.save_txt(proofread_root_path, root_ids_array)

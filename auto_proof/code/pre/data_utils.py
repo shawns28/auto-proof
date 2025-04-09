@@ -158,5 +158,4 @@ def add_identifier_to_roots(roots):
     new_roots = []
     for i in range(len(roots)):
         new_roots.append(str(roots[i]) + '_000')
-    new_roots = np.array(new_roots)
     return new_roots

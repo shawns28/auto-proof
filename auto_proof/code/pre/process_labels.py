@@ -15,20 +15,9 @@ def main(data_config):
     """
         TODO: Fill in
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--chunk_num", help="chunk num")
-    parser.add_argument("-n", "--num_processes", help="num processes")
-    args = parser.parse_args()
-    if args.num_processes:
-        data_config['multiprocessing']['num_processes'] = int(args.num_processes)
-    chunk_num = 1
-    num_chunks = config['multiprocessing']['num_chunks']
-    if args.chunk_num:
-        chunk_num = int(args.chunk_num)
-    else: # No chunking
-        num_chunks = 1
+    data_config, chunk_num, num_chunks, num_processes = data_utils.get_num_chunk_and_processes(data_config)
 
-    roots = data_utils.load_txt(data_config['paths']['root_path'])
+    roots = data_utils.load_txt(data_config['labels']['pre_root_path'])
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
 
     num_processes = data_config['multiprocessing']['num_processes']

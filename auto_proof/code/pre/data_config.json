@@ -1,7 +1,7 @@
 {
     "multiprocessing": {
         "num_chunks": 24,
-        "num_processes": 32
+        "num_processes": 30
     },
     "paths": {
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/"
@@ -22,7 +22,10 @@
     "proofread": {
         "943_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.txt",
         "1300_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.txt",
-        "combined_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300.txt",
+        "943_unique_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt",
+        "1300_unique_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique.txt",
+        "combined_proofread_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300.txt",
+        "changed_proofread_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300_changed.txt",
         "943_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.csv",
         "1300_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.csv",
         "mat_versions": [943, 1300],
@@ -38,6 +41,7 @@
         "map_pe": true,
         "dist": true,
         "cutoff": 500,
+        "generate_chunk_size": 1000, 
         "skeleton_version": 4,
         "pos_enc_dim": 32,
         "box_cutoff": 100,
@@ -45,6 +49,7 @@
     },
     "labels": {
         "labels": true,
+        "pre_root_path": 
         "labels_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/labels/"
     },
     "roots_at": {
