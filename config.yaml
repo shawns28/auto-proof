@@ -1,0 +1,18 @@
+
+    default_settings: &default
+      timeout: 30
+      retries: 3
+      logging:
+        level: "INFO"
+
+    server1:
+      <<: *default
+      host: "server1.example.com"
+      port: &port 8080
+      timeout: *port + 4
+
+    server2:
+      <<: *default
+      host: "server2.example.com"
+      port: 8081
+    

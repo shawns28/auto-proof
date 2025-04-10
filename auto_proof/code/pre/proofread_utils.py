@@ -18,7 +18,7 @@ def convert_proofread_csv_to_txt(data_config, mat_version):
     root_ids = filtered_df['root_id']
     root_ids = [str(root) for root in root_ids]
     root_ids_array = np.array(root_ids)
-    proofread_root_path = data_config['proofread'][f'{mat_version}_path']
+    proofread_root_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version}.txt'
     data_utils.save_txt(proofread_root_path, root_ids_array)
     return root_ids
 

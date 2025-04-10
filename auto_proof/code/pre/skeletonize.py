@@ -122,32 +122,3 @@ def get_closest(arr, target):
     index = np.argmin(summed)
     value = arr[index]
     return index, value
-
-def save_skeletonized_roots(config, post_skel_path):
-    files = glob.glob(f'{config['data']['features_dir']}*')
-    roots = [files[i][-27:-5] for i in range(len(files))]
-    print(roots[0])
-    data_utils.save_txt(post_skel_path, roots)
-    
-if __name__ == "__main__":
-    config = data_utils.get_config()
-    # config['data']['is_proofread'] = True
-    # config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/proofread_features/"
-    # config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_943.txt"
-    # post_skel_path = f'{config['data']['data_dir']}root_ids/post_skel_proofread_roots.txt'
-
-    # config['data']['is_proofread'] = False
-    # config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
-    # config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/debugging_roots.txt"
-    # post_skel_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_skel_debugging_roots.txt"
-
-    config['data']['is_proofread'] = True
-    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
-    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_roots_in_train_roots_369502_913_conv.txt"
-    config['data']['num_rand_seeds'] = 0
-    post_skel_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_skel_debugging_roots.txt"
-    skeletonize(config)
-    
-    # NOTE: This will save the file each time a chunk finishes but should still result in the correct file
-    # print("Saving successfuly skeletonized roots list as txt")
-    save_skeletonized_roots(config, post_skel_path)

@@ -5,11 +5,12 @@ from auto_proof.code.pre.create_proofread_943_txt import convert_proofread_csv_t
 import os
 import numpy as np
 from tqdm import tqdm
-import graph_tool.all as gt
 import h5py
 import time
 import argparse
 import multiprocessing
+from cloudvolume import CloudVolume
+
 
 def main(data_config):
     """
@@ -17,12 +18,24 @@ def main(data_config):
     """
     data_config, chunk_num, num_chunks, num_processes = data_utils.get_num_chunk_and_processes(data_config)
 
-    roots = data_utils.load_txt(data_config['labels']['pre_root_path'])
+    roots = data_utils.load_txt()
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
 
-    num_processes = data_config['multiprocessing']['num_processes']
-    client = data_utils.create_client(data_config)
-    args_list = list([(root, config, data_config, client) for root in roots])
+    labels_dir = data_config['features']['labels_dir']
+    if not os.path.exists(labels_dir):
+        os.makedirs(labels_dir)
+
+    roots_at_latest_dir = data_config['features']['roots_at_latest_dir']
+    if not os.path.exists(roots_at_latest_dir):
+        os.makedirs(roots_at_latest_dir)
+
+    latest_version = data_config['labels']['latest_mat_version']
+    seg_path = data_config['segmentation'][f'precomputed_{latest_version}']
+    cv_seg = CloudVolume(seg_path, use_https=True)
+
+    root_paths = 
+
+    args_list = list([(root, data_config, client) for root in roots])
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
         for _ in pool.imap_unordered(process_root, args_list):
             pbar.update()

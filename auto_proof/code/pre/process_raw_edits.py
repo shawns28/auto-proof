@@ -24,7 +24,7 @@ def process_raw_edits(data_config):
     client = data_utils.create_client(data_config)
     mat_version_start = data_config['client']['mat_version_start']
     mat_version_end = data_config['client']['mat_version_end']
-    data_dir = data_config['paths']['data_dir']
+    data_dir = data_config['data_dir']
 
     splitlog_dir = f'{data_dir}splitlog_{mat_version_start}_{mat_version_end}/'
     if not os.path.exists(splitlog_dir):
@@ -36,8 +36,8 @@ def process_raw_edits(data_config):
     if not os.path.exists(dicts_dir):
         os.makedirs(dicts_dir)
 
-    root_ids_txt_path = f'{roots_dir}pre_edit_roots_list.txt'
-    root_id_to_rep_coords_path = f'{dicts_dir}root_id_to_rep_coords.pkl'
+    root_ids_txt_path = f'{roots_dir}{data_config['raw_edits']['post_raw_edit_roots']}'
+    root_id_to_rep_coords_path = f'{dicts_dir}{data_config['raw_edits']['root_to_rep']}'
     if os.path.exists(root_ids_txt_path) and os.path.exists(root_id_to_rep_coords_path):
         print("Already have the root id and rep list")
         return 
@@ -84,10 +84,8 @@ def process_raw_edits(data_config):
     if not (os.path.exists(op_to_rep_coords_path)):
         print("saving op_to_rep_coords")
         pruned_df = pd.read_feather(pruned_df_path)
-        x_res = data_config['raw_edits']['x_res']
-        y_res = data_config['raw_edits']['y_res']
-        z_res = data_config['raw_edits']['z_res']
-        save_operation_to_rep_coords(pruned_df, x_res, y_res, z_res, op_to_rep_coords_path)
+        resolution = data_config['segmentation']['resolution']
+        save_operation_to_rep_coords(pruned_df, resolution, op_to_rep_coords_path)
         print("done saving op_to_rep_coords")
 
     op_to_pre_edit_roots_path = f'{dicts_dir}operation_to_pre_edit_roots.pkl'
@@ -189,7 +187,7 @@ def save_operation_to_pre_edit_dates(df, save_path):
         op_to_pre_edit_dates[op_id] = pre_edit_date
     data_utils.save_pickle_dict(save_path, op_to_pre_edit_dates)
 
-def save_operation_to_rep_coords(df, x_res, y_res, z_res, save_path):
+def save_operation_to_rep_coords(df, resolution, save_path):
     """
     Creates a map from operation ids to representative coordinates.
     Representative coords represent the x,y,z coordinate in nanometers
@@ -204,9 +202,9 @@ def save_operation_to_rep_coords(df, x_res, y_res, z_res, save_path):
     
     for op_id in df['operation_id']:
         coord = np.zeros(3)
-        coord[0] = df.loc[df['operation_id'] == op_id, 'mean_coord_x'].values[0] * 8
-        coord[1] = df.loc[df['operation_id'] == op_id, 'mean_coord_y'].values[0] * 8
-        coord[2] = df.loc[df['operation_id'] == op_id, 'mean_coord_z'].values[0] * 40
+        coord[0] = df.loc[df['operation_id'] == op_id, 'mean_coord_x'].values[0] * resolution[0]
+        coord[1] = df.loc[df['operation_id'] == op_id, 'mean_coord_y'].values[0] * resolution[1]
+        coord[2] = df.loc[df['operation_id'] == op_id, 'mean_coord_z'].values[0] * resolution[2]
         op_to_rep_coords[op_id] = coord
     data_utils.save_pickle_dict(save_path, op_to_rep_coords)
 
