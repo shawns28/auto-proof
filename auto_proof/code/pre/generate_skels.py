@@ -1,12 +1,7 @@
 from auto_proof.code.pre import data_utils
-from auto_proof.code.pre.skeletonize import get_skel, process_skel
-from auto_proof.code.pre.map_pe import map_pe_wrapper
 
 import os
 import numpy as np
-from tqdm import tqdm
-import h5py
-import multiprocessing
 import glob
 import time
 
@@ -31,13 +26,9 @@ def main(data_config):
     # roots = ['864691135865167998_000'] # proofread
     # roots = ['864691135155575396_000', '864691135865167998_000']
 
-    # root_to_rep_coord = data_utils.load_pickle_dict(data_config['raw_edits']['root_to_rep'])
-    # proofread_roots = data_utils.load_txt(data_config['raw_edits']['proofread_roots'])
     client = data_utils.create_client(data_config)
     datastack_name = data_config['client']['datastack_name']
     skeleton_version = data_config['features']['skeleton_version']
-
-    
 
     print("roots original len", len(roots))
     files = glob.glob(f'{features_dir}*')

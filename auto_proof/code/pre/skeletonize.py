@@ -1,29 +1,21 @@
 from auto_proof.code.pre import data_utils
 
-from caveclient import CAVEclient
-import os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import graph_tool.all as gt
-import h5py
-import json
-import sys
+# import graph_tool.all as gt
+import networkx as nx
 import time
-import argparse
-import glob
 
+# class Visitor(gt.BFSVisitor):
+#     """Custom class for graph tool to determine the rank using bfs"""
+#     def __init__(self, vp_rank):
+#         self.vp_rank = vp_rank
+#         self.rank = -1
 
-
-class Visitor(gt.BFSVisitor):
-    """Custom class for graph tool to determine the rank using bfs"""
-    def __init__(self, vp_rank):
-        self.vp_rank = vp_rank
-        self.rank = -1
-
-    def examine_vertex(self, u):
-        self.rank += 1
-        self.vp_rank[u] = self.rank
+#     def examine_vertex(self, u):
+#         self.rank += 1
+#         self.vp_rank[u] = self.rank
 
 def get_skel(datastack_name, skeleton_version, root, client):
     """NOTE/TODO: 
@@ -64,7 +56,11 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
         rep_index = np.random.randint(0, len(skel_vertices))
 
     try:
-        g = gt.Graph(skel_edges, directed=False)
+        g = nx.Graph()
+        g.add_nodes_from(range(len(skel_vertices)))
+        g.add_edges_from(skel_edges)
+        # print("nodes order nx", g.nodes())
+        # g = gt.Graph(skel_edges, directed=False)
     except Exception as e:
         return False, e, None
 
@@ -103,17 +99,29 @@ def create_rank(g, rep_index, skel_len, box_cutoff):
     rep_included = False
     while not rep_included:
         seed = np.random.randint(skel_len)
-        rank_arr = bfs(g, seed)
+        rank_arr = bfs(g, seed, skel_len)
+        # rank_arr = bfs(g, seed)
         if rank_arr[rep_index] < box_cutoff:
             rep_included = True
     return rank_arr
 
-# NOTE: This will run bfs on the entire graph and won't do early termination which would be faster
-def bfs(g, seed_index):
-    vp_rank = g.new_vp("int")
-    gt.bfs_search(g, seed_index, Visitor(vp_rank))
-    rank_arr = vp_rank.a
-    return np.array(rank_arr)
+def bfs(g, seed_index, skel_len):
+    visited = {seed_index}
+    order = [seed_index]
+    for _, v in nx.bfs_edges(g, seed_index):
+        if v not in visited:
+            visited.add(v)
+            order.append(v)
+    rank = {node: i for i, node in enumerate(order)}
+    rank_arr = np.array([rank[i] for i in range(skel_len)])
+    return rank_arr
+
+
+# def bfs(g, seed_index):
+#     vp_rank = g.new_vp("int")
+#     gt.bfs_search(g, seed_index, Visitor(vp_rank))
+#     rank_arr = vp_rank.a
+#     return np.array(rank_arr)
 
 def get_closest(arr, target):
     result = arr - target

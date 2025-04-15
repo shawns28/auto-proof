@@ -14,7 +14,7 @@
         "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.feather",
         "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.npy",
         "root_to_rep": "root_id_to_rep_coords.pkl",
-        "post_raw_edit_roots": "pre_edit_roots_list.txt"
+        "post_raw_edit_roots": "post_edit_roots.txt"
     },
     "proofread": {
         "proofread_dir": "proofread/",
@@ -37,9 +37,9 @@
     },
     "labels": {
         "latest_mat_version": 1300,
-        "roots_at_latest_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_1300/",
-        "pre_root_path": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/343_943.txt",
-        "labels_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/labels/"
+        "roots_at_latest_dir": "roots_at_",
+        "labels_at_latest_dir": "labels_at_",
+        "post_label_roots": "post_label_roots.txt"
     },
     "segmentation": {
         "precomputed_343": "precomputed://gs://iarpa_microns/minnie/minnie65/seg_m343/",

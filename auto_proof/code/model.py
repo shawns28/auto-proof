@@ -193,7 +193,7 @@ class GraphTransformer(nn.Module):
         dist_mask = torch.logical_and(dist_to_error >= 0, dist_to_error <= max_dist)
         losses[dist_mask] *= tolerance_weight
 
-        conf_mask = confidences == 0 # (b * fov - buffer - tolerance)
+        conf_mask = confidences == False # (b * fov - buffer - tolerance)
         losses[conf_mask] *= conf_weight
 
         # print("losses post confidence", losses)

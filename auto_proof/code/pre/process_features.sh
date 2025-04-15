@@ -10,4 +10,4 @@
 #SBATCH -e /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/logs/process_features/%A_%a.err
 #SBATCH --partition celltypes         # Partition used for processing
 
-conda run -n gt python -m auto_proof.code.pre.process_features -c $SLURM_ARRAY_TASK_ID -n 1
+conda run -n train python -m auto_proof.code.pre.process_features -c $SLURM_ARRAY_TASK_ID -n 1

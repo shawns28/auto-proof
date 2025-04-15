@@ -1,17 +1,68 @@
 from auto_proof.code.dataset import AutoProofDataset, adjency_to_edge_list_torch_skip_diag
-from auto_proof.code.pre import data_utils
 from auto_proof.code.model import create_model
-from auto_proof.code.utils import get_root_output
+from auto_proof.code.pre import data_utils
 
 import torch
 import torch.nn as nn
 import json
 import pyvista as pv
 import numpy as np
+import matplotlib as plt
 # from cloudvolume import CloudVolume
 from tqdm import tqdm
-import multiprocessing
-# Remember to remove morphlink package that already exists in directory
+
+def get_root_output(model, device, data, root):
+    model.eval() # Marking this here due to async
+    with torch.no_grad(): # Marking this here due to async
+        # For now it's just pulling a specific sample, later this will pull a specific sample in train/val/test
+        # model.to(device)
+        idx = data.get_root_index(root)
+        sample = data.__getitem__(idx)
+        _ , input, labels, confidence, dist_to_error, _ , adj = sample 
+        input = input.float().to(device).unsqueeze(0) # (1, fov, d)
+        labels = labels.float().to(device) # (fov, 1)
+        confidence = confidence.float().to(device) # (fov, 1)
+        adj = adj.float().to(device).unsqueeze(0) # (1, fov, fov)
+        dist_to_error = dist_to_error.float().to(device) # (fov, 1)
+
+        output = model(input, adj) # (1, fov, 1)
+        sigmoid = nn.Sigmoid()
+        output = sigmoid(output) # (1, fov, 1)
+        output = output.squeeze(0) # (fov, 1)
+
+        # original represents the original points that weren't buffered
+        mask = labels != -1
+        mask = mask.squeeze(-1) # (original)
+        
+        # Apply mask to get original points
+        output = output[mask] # (original, 1)
+        input = input.squeeze(0)[mask] # (original, d)
+        labels = labels[mask] # (original, 1)
+        confidence = confidence[mask] # (original, 1)
+        adj = adj.squeeze(0)[mask, :][:, mask] # (original, original)
+        dist_to_error = dist_to_error[mask] # (original, 1)
+
+        # Vertices is always first in the input
+        vertices = input[:, :3]
+        edges = adjency_to_edge_list_torch_skip_diag(adj)
+
+        config = data_utils.get_config()
+        client = data_utils.create_client(config)  
+        cv = client.info.segmentation_cloudvolume(progress=False)
+        root_without_num = int(root[:-4]) # Removing _000 for mesh retrieval
+        mesh = cv.mesh.get(
+            root_without_num, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=False
+        )[root_without_num]
+        # seg_path = "graphene://middleauth+https://minnie.microns-daf.com/segmentation/table/minnie3_v1"
+        # cv_seg = CloudVolume(seg_path, progress=False, use_https=True, parallel=True)
+        # mesh = cv_seg.mesh.get(root_without_num, deduplicate_chunk_boundaries=False, remove_duplicate_vertices=True)[root_without_num]
+        
+        root_mesh = pv.make_tri_mesh(mesh.vertices, mesh.faces)
+
+        is_proofread = data.get_is_proofread(root)
+        num_initial_vertices = data.get_num_initial_vertices(root)
+
+    return vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error
 
 # Not detaching here because it causes weird error where it wants it to 
 def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, show_tol, path):
@@ -27,9 +78,9 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     dist_to_error = dist_to_error.squeeze(-1).detach().cpu().numpy() # (original, )
 
     combined = labels * 2 + confidence
-    c_m = (combined == 1).astype(bool)
-    nc_nm = (combined == 2).astype(bool)
-    c_nm = (combined == 3).astype(bool)
+    c_m = (combined == 3).astype(bool)
+    nc_nm = (combined == 0).astype(bool)
+    c_nm = (combined == 1).astype(bool)
     # 0 = non-confident merge (This can't happen)
     # 1 = confident merge
     # 2 = non-confident non-merge
@@ -95,7 +146,12 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     output = np.append(output, [0, 1])
     skel_poly_output = pv.PolyData(vertices_output, lines=lines)
     plotter.add_mesh(skel_poly_output, color='black')
-    plotter.add_points(vertices_output, scalars=output, label='predictions', cmap='RdYlGn', point_size=10, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'predictions'})
+
+    cmap_name = 'RdYlGn'
+    cmap = plt.colormaps.get_cmap(cmap_name)
+    inverted_cmap = cmap.reversed()
+
+    plotter.add_points(vertices_output, scalars=output, label='predictions', cmap=inverted_cmap, point_size=10, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'predictions'})
     # Doesn't work for interactive it seems
     plotter.add_text("Output", font_size=14) 
     plotter.link_views()
@@ -105,29 +161,48 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     plotter.link_views()
     
     plotter.export_html(path)  
-
-def visualize_root(stuff):
-    try:
-        model, device, data, root = stuff
-        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/visualize_{root}_ckpt34_500_fov.html'
-        vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_intitial_vertices, dist_to_error = get_root_output(model, device, data, root)
-        print("is_proofread", is_proofread)
-        print("num_intitial_vertice", num_intitial_vertices)
-        visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, path)
-    except Exception as e:
-        print("Failed visualization for root id: ", root, "error: ", e)
             
+def visualize_segclr(vertices, edges, segclr_nodes, path):
+    pv.set_jupyter_backend('trame')
+    vertices = vertices.detach().cpu().numpy()
+    edges = edges.detach().cpu().numpy()
+    lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly = pv.PolyData(vertices, lines=lines)
+
+    segclr_nodes = segclr_nodes.detach().cpu().numpy()
+    
+    pv.start_xvfb()
+    plotter = pv.Plotter(shape="1/2", off_screen=True, border=True, border_color='black')
+    
+    plotter.subplot(0)
+    plotter.add_mesh(skel_poly, color='black')
+    plotter.add_points(segclr_nodes, point_size=10, render_points_as_spheres=True, show_vertices=True)
+    
+    plotter.camera.tight()
+    plotter.subplot_border_visible = True
+
+    plotter.subplot(1)
+    vertices_output = vertices.copy()
+    skel_poly_output = pv.PolyData(vertices_output, lines=lines)
+    plotter.add_mesh(skel_poly_output, color='black')
+
+    plotter.link_views()
+    
+    plotter.export_html(path)  
 
 if __name__ == "__main__":
-    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
+    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
     # run_id = 'AUT-215'
     run_id = 'AUT-255'
     epoch = 30
     run_dir = f'{ckpt_dir}{run_id}/'
-    with open(f'{run_dir}config.json', 'r') as f:
+    # TODO: Uncomment below after segclr testing
+    # with open(f'{run_dir}config.json', 'r') as f:
+    #     config = json.load(f)
+    with open('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json', 'r') as f:
         config = json.load(f)
 
-    data = AutoProofDataset(config, 'root')
+    data = AutoProofDataset(config, 'all')
     # config['model']['depth'] = 3
     # config['model']['n_head'] = 4
     model = create_model(config)
@@ -162,8 +237,8 @@ if __name__ == "__main__":
     # roots = [864691135989085184, 864691135683792114, 864691136483519276, 864691135571609125, 864691135876419923, 864691136310246234, 864691136009015212, 864691135697685269, 864691136266911476]
     # Roots that are sus because conf and error are similar but not exact
     # roots = [864691134940047459, 864691135411419697, 864691135724417451, 864691135472111666]
-    roots = ['864691135571361317_000', '864691135991989185_000', '864691136952448223_000', '864691136296738587_000', '864691135855823662_000', '864691136619551117_000', '864691136558482594_000', '864691136388405623_000']
-    roots = ['864691135472212274_000', '864691135615918697_000', '864691136736838510_000', '864691136286727107_000', '864691135538252914_000', '864691135517565322_000', '864691135987088387_000', '864691135952189475_000']
+    # roots = ['864691135571361317_000', '864691135991989185_000', '864691136952448223_000', '864691136296738587_000', '864691135855823662_000', '864691136619551117_000', '864691136558482594_000', '864691136388405623_000']
+    # roots = ['864691135472212274_000', '864691135615918697_000', '864691136736838510_000', '864691136286727107_000', '864691135538252914_000', '864691135517565322_000', '864691135987088387_000', '864691135952189475_000']
     max_dist = config['trainer']['max_dist']
     # stuff = [(model, device, data, 864691135463333789), (model, device, data, 864691135778235581), (model, device, data, 864691135463333789), (model, device, data, 864691135778235581)]
     # num_processes = len(stuff)
@@ -173,7 +248,9 @@ if __name__ == "__main__":
     config['trainer']['visualize_cutoff'] = 9600
     config['loader']['fov'] = 250
     config['trainer']['show_tol'] = False
-           
+    roots = ['864691135463333789_000']
+    roots = ['864691135778235581_000']
+
     # for i in range(10):
     for root in roots:
         # try:
@@ -183,11 +260,13 @@ if __name__ == "__main__":
         num_initial_vertices = data.get_num_initial_vertices(root)
         print("num_initial_vertice", num_initial_vertices, "for root", root)
         if num_initial_vertices < config['trainer']['visualize_cutoff']:
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/missed_errors_255/{root}_ckpt{epoch}_{config['loader']['fov']}.html'
             print("getting root output")
             vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
             print("is_proofread", is_proofread)
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_ckpt{epoch}_{config['loader']['fov']}.html'
             visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], path)
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
+            # visualize_segclr(vertices, edges, path)
         # except Exception as e:
         #     print("Failed visualization for root id: ", root, "error: ", e)
         #     continue

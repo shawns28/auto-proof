@@ -1,6 +1,5 @@
 from auto_proof.code.dataset import build_dataloader
-from auto_proof.code.visualize import visualize
-from auto_proof.code.utils import get_root_output
+from auto_proof.code.visualize import visualize, get_root_output
 from auto_proof.code.pre import data_utils
 from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plot
 
@@ -28,17 +27,14 @@ class Trainer(object):
         self.run["gpu"] = torch.cuda.get_device_name(0)
         self.model = model.to(self.device)
         self.config = config
-        self.ckpt_dir = config['trainer']['ckpt_dir']
-        self.save_ckpt_every = config['trainer']['save_ckpt_every']
-        self.save_visual_every = config['trainer']['save_visual_every']
-        self.show_tol = config['trainer']['show_tol']
-        self.batch_size = config['loader']['batch_size']
-        self.data_dir = config['data']['data_dir']
-        self.save_dir = f'{self.ckpt_dir}{self.run_id}/'
-        self.box_cutoff = config['data']['box_cutoff']
-        self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
 
-        ### datasets
+        self.data_dir = config['data']['data_dir']
+        self.box_cutoff = config['data']['box_cutoff']
+        mat_version_start = config['client']['mat_version_start']
+        mat_version_end = config['client']['mat_version_end']
+        self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
+
+        # Datasets
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -49,22 +45,32 @@ class Trainer(object):
         self.val_size = len(val_dataset)
         self.test_size = len(test_dataset)
 
-        self.obj_det_val_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
+        self.batch_size = config['loader']['batch_size']
 
+        self.ckpt_dir = f'{self.data_dir}{config['trainer']['ckpt_dir']}'
+        self.save_dir = f'{self.ckpt_dir}{self.run_id}/'
+        self.save_ckpt_every = config['trainer']['save_ckpt_every']
+        self.save_visual_every = config['trainer']['save_visual_every']
+        self.show_tol = config['trainer']['show_tol']
+        self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
+        self.max_dist = config['trainer']['max_dist']
+        self.visualize_rand_num = config['trainer']['visualize_rand_num']
+        self.visualize_cutoff = config['trainer']['visualize_cutoff']
+        self.tresholds = self.config['trainer']['thresholds']
+        self.recall_targets = self.config['trainer']['recall_targets']
+
+        # Loss weights
         self.class_weights = torch.tensor(config['trainer']['class_weights']).float().to(self.device)
         self.conf_weight = config['trainer']['conf_weight']
         self.tolerance_weight = config['trainer']['tolerance_weight']
         self.box_weight = config['trainer']['box_weight']
 
+        self.obj_det_val_roots = set(data_utils.load_txt(f'{self.roots_dir}{config['data']['obj_det_val_roots']}'))
+
         ### trainings params
         self.epochs = config['optimizer']['epochs']
         self.epoch = 0
         self.lr = config['optimizer']['lr']
-
-        self.max_dist = config['trainer']['max_dist']
-        self.visualize_rand_num = config['trainer']['visualize_rand_num']
-        self.visualize_cutoff = config['trainer']['visualize_cutoff']
-
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
         # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
         self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
@@ -125,10 +131,10 @@ class Trainer(object):
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-                input, labels, confidence, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
 
                 output = self.model(input, adj)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight, rank, self.box_cutoff, self.box_weight)
+                loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight, rank, self.box_cutoff, self.box_weight)
                 # self.run["train/loss"].append(loss)
 
                 # optimize 
@@ -153,8 +159,6 @@ class Trainer(object):
         # Thresholds for merge error
         running_vloss = 0
 
-        recall_targets = [0.99, 0.95, 0.9, 0.5]
-
         total_output = torch.zeros(1).to(self.device)
         total_labels = torch.zeros(1).to(self.device)
         total_output_conf = torch.zeros(1).to(self.device)
@@ -166,17 +170,17 @@ class Trainer(object):
             for i, data in enumerate(self.val_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots = data[0]
-                input, labels, confidence, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 output = self.model(input, adj) # (b, fov, 1)
-                loss = self.model.compute_loss(output, labels, confidence, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
+                loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
                 self.run["val/loss"].append(loss)
                 running_vloss += loss
 
                 sigmoid = nn.Sigmoid()
                 output = sigmoid(output).squeeze(-1) # (b, fov)
                 labels = labels.squeeze(-1) # (b, fov)
-                confidence = confidence.squeeze(-1) # (b, fov)
+                confidences = confidences.squeeze(-1) # (b, fov)
                 dist_to_error = dist_to_error.squeeze(-1) # (b, fov)
 
                 mask = labels != -1
@@ -189,7 +193,7 @@ class Trainer(object):
                 total_output = torch.cat((total_output, output_masked), dim=0)
                 total_labels = torch.cat((total_labels, labels_masked), dim=0)
 
-                conf_mask = confidence == 1
+                conf_mask = confidences == True
                 output_conf = output[conf_mask]
                 labels_conf = labels[conf_mask]
                 dist_to_error_masked = dist_to_error[conf_mask]
@@ -219,27 +223,22 @@ class Trainer(object):
             
             metrics_dict = obj_det_data.__getmetrics__()
 
-            obj_save_path = obj_det_plot(metrics_dict, self.config['trainer']['thresholds'], self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
+            obj_save_path = obj_det_plot(metrics_dict, self.tresholds, self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
             self.run[f"plots/obj_precision_recall_curve"].append(neptune.types.File(obj_save_path))
 
         # Taking out the initial 0 from initialization
         # NOTE: Theses plots are no longer useful really
         total_labels = total_labels.cpu().detach().numpy()[1:]
         total_output = total_output.cpu().detach().numpy()[1:]
-        self.pinned_plot(total_labels, total_output, recall_targets, 'all')
+        self.pinned_plot(total_labels, total_output, self.recall_targets, 'all')
 
         total_labels_conf = total_labels_conf.cpu().detach().numpy()[1:]
         total_output_conf = total_output_conf.cpu().detach().numpy()[1:]
-        self.pinned_plot(total_labels_conf, total_output_conf, recall_targets, 'confident')
+        self.pinned_plot(total_labels_conf, total_output_conf, self.recall_targets, 'confident')
         
         return running_vloss / (self.val_size / self.batch_size)
 
     def pinned_plot(self, total_labels, total_output, recall_targets, mode):
-        # Flipping the labels to make merge errors 1 for scikit-learn precision recall curve
-        # Output is also flipped since closer to 0 is normally error
-        total_labels = 1 - total_labels
-        total_output = 1 - total_output
-
         precision_curve, recall_curve, threshold_curve = precision_recall_curve(total_labels, total_output)
 
         plt.figure(figsize=(8, 8))
@@ -268,7 +267,8 @@ class Trainer(object):
     def find_pinned_recall(self, precision_curve, recall_curve, threshold_curve, target_recall):
         pinned_idx = np.argmin(np.abs(recall_curve - target_recall))
         # Invert this to be consistent with other visualization
-        pinned_threshold = 1 - threshold_curve[pinned_idx]
+        # pinned_threshold = 1 - threshold_curve[pinned_idx]
+        pinned_threshold = threshold_curve[pinned_idx]
         pinned_precision = precision_curve[pinned_idx]
         pinned_recall = recall_curve[pinned_idx]
 
@@ -305,7 +305,7 @@ class Trainer(object):
     def visualize_root(self, root, is_constant, mode, dataset_dict):
         try:
             dataset = dataset_dict[mode]
-            vertices, edges, labels, confidence, output, root_mesh, is_proofread, _ , dist_to_error = get_root_output(self.model, self.device, dataset, root)
+            vertices, edges, labels, confidences, output, root_mesh, is_proofread, _ , dist_to_error = get_root_output(self.model, self.device, dataset, root)
             random = 'random'
             if is_constant:
                 random = 'constant'
@@ -313,7 +313,7 @@ class Trainer(object):
             if is_proofread:
                 edit = 'proofread'
             save_path = f'{self.save_dir}{self.epoch}_{random}_{mode}_{edit}_{root}.html'
-            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, self.max_dist, self.show_tol, save_path)
+            visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, self.max_dist, self.show_tol, save_path)
             self.run[f"visuals/{self.epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
         except Exception as e:
             print("Failed visualization for root id: ", root, "error: ", e)

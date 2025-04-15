@@ -34,10 +34,13 @@ def main():
         source_files=["auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/code/object_detection.py", "auto_proof/base_config.json"],
     )
 
+    recall_targets = config["trainer"]["recall_targets"]
     thresholds = config["trainer"]["thresholds"]
     config["trainer"]["thresholds"] = str(thresholds)
+    config["trainer"]["recall_targets"] = str(recall_targets)
     run["parameters"] = config
     config["trainer"]["thresholds"] = thresholds
+    config["trainer"]["recall_targets"] = recall_targets
 
     print("Tatal num workers", config['loader']['num_workers'])
     print("Batch size" , config['loader']['batch_size'])

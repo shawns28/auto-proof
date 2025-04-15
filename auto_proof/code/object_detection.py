@@ -1,7 +1,6 @@
 from auto_proof.code.dataset import AutoProofDataset, adjency_to_edge_list_torch_skip_diag, prune_edges, build_dataloader
 from auto_proof.code.pre import data_utils
 from auto_proof.code.model import create_model
-from auto_proof.code.utils import get_root_output
 
 import torch
 import torch.nn as nn
@@ -69,9 +68,10 @@ class ObjectDetectionDataset(Dataset):
 
                 assert(len(labels) == len(output))
 
+                # Might need to change this, not sure
                 threshold_to_output = {}
                 for threshold in self.thresholds:
-                    threshold_to_output[threshold] = np.where(output < threshold, 0, 1)
+                    threshold_to_output[threshold] = np.where(output < threshold, False, True)
 
                 g = nx.Graph()
                 g.add_edges_from(edges)
@@ -106,27 +106,27 @@ def remove_isolated_errors(graph, label_ccs, confidence):
         is_isolated = True
         for node in cc:
             for neighbor in graph.adj[node]:
-                if neighbor not in cc and confidence[neighbor] == 1:
+                if neighbor not in cc and confidence[neighbor] == True:
                     is_isolated = False
                     break
             if not is_isolated:
                 break
         if is_isolated:
             for node in cc:
-                confidence[node] = 0
+                confidence[node] = True
         else:
             new_label_ccs.append(cc)
     return new_label_ccs, confidence
 
 def get_label_components(graph, labels, box_cutoff_nodes):
     # data=False since we don't need other attributes of the nodes after we do this
-    subgraph_nodes = [i for i in range(len(labels)) if (labels[i] == 0 and box_cutoff_nodes[i] == True)]
+    subgraph_nodes = [i for i in range(len(labels)) if (labels[i] == True and box_cutoff_nodes[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
 def get_output_components(graph, threshold_output, confidence):
-    subgraph_nodes = [i for i in range(len(confidence)) if (threshold_output[i] == 0 and confidence[i] == True)]
+    subgraph_nodes = [i for i in range(len(confidence)) if (threshold_output[i] == True and confidence[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
@@ -140,7 +140,7 @@ def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio, box_cut
         count = 0
         new_cc = set()
         for node in cc:
-            if labels[node] == 0: # TODO: Should I do this or no
+            if labels[node] == True: # TODO: Should I do this or no
                 count += 1
             if box_cutoff_nodes[node]:
                 new_cc.add(node)

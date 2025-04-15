@@ -1,4 +1,6 @@
 from auto_proof.code.pre import data_utils
+from auto_proof.code.visualize import visualize_segclr
+
 
 import os
 import pandas as pd
@@ -35,12 +37,14 @@ def run_segclr():
 
     # roots = data_utils.load_txt(config['data']['root_path'])
     # roots = ['864691135591041291_000'] # proofread at 943
-    roots = ['864691135463333789_000']
+    # roots = ['864691135463333789_000']
+    roots = ['']
     # roots = ['864691135937424949_000'] # size 7
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
 
     num_processes = data_config['multiprocessing']['num_processes']
-    features_directory = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/"
+    features_directory = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/features/"
+    root_at_directory = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_1300/"
     mat = 943
 
     # NOTE: This is for 943 specifically
@@ -58,21 +62,23 @@ def run_segclr():
     # bytewidth = 8
     # embedding_reader = EmbeddingReader(filesystem, url, sharder, num_shards, bytewidth)
 
-    args_list = list([(root, features_directory, mat, embedding_reader) for root in roots])
+    args_list = list([(root, features_directory, root_at_directory, mat, embedding_reader) for root in roots])
 
     # with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
     #     for _ in pool.imap_unordered(segclr_one_root, args_list):
     #         pbar.update() 
     
-    segclr(args_list[0])           
+    segclr(args_list[0])
 
 def segclr(data):
-    root, features_directory, mat, embedding_reader = data
+    root, features_directory, root_at_directory, mat, embedding_reader = data
     root_feat_path = f'{features_directory}{root}.hdf5'
-    with h5py.File(root_feat_path, 'r') as f:
-        vertices = f['vertices'][:]
+    root_at_path = f'{root_at_directory}{root}.hdf5'
+    with h5py.File(root_feat_path, 'r') as feat_f, h5py.File(root_at_path, 'r') as at_f:
+        vertices = feat_f['vertices'][:]
+        edges = feat_f['edges'][:]
         print("num vertice", vertices.shape)
-        roots_at_mat = f[f'root_{mat}'][:]
+        roots_at_mat = at_f[f'roots_at'][:]
 
         # Testing max distance of vertices
         max_dist = 0
@@ -120,13 +126,16 @@ def segclr(data):
 
                 q_indices = tree.query_ball_point(vertice, radius)
                 # print("indices", q_indices)
-                for i in q_indices:
-                    print("closest vertices", coords[i])
+                # for i in q_indices:
+                #     print("closest vertices", coords[i])
                 if len(q_indices) == 0:
                     print("Nothing within radius of:", radius)
 
                 result[index] = np.mean([emb_vals[q_ind] for q_ind in q_indices], axis=0)
+                #TODO: Need to get an array that has the vertices of the segclr nodes, might need to visualize a subset if its not able to visualize all the points
         print("result shape", result.shape)
+        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
+        visualize_segclr(vertices, edges, res, path)
 
 def create_root_at_mat_dict(roots_at_mat):
     roots_at_mat_to_indices = {}

@@ -4,9 +4,8 @@ import pickle
 import json
 import argparse
 
-CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
 DATA_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/pre/data_config.json'
-
+CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
 def get_config():
     """Initializes base config.
 
@@ -27,17 +26,17 @@ def get_data_config():
         data_config = json.load(f)
     return data_config
 
-def create_client(data_config):
+def create_client(config):
     """Initialize client and return it as well as relevant info.
-    
+
     Args:
-        data_config
+        config
     Returns:
         client: cave client
     """
-    datastack_name = data_config["client"]["datastack_name"]
-    my_token = data_config["client"]["my_token"]
-    mat_version = data_config["client"]["mat_version_end"]
+    datastack_name = config["client"]["datastack_name"]
+    my_token = config["client"]["my_token"]
+    mat_version = config["client"]["mat_version_end"]
     client = CAVEclient(datastack_name=datastack_name, auth_token=my_token, version=mat_version)
     return client
 
@@ -100,7 +99,7 @@ def get_roots_chunk(root_ids, chunk_num, num_chunks):
     """Gets the correct list of roots for that chunk
     
     Args:
-        config
+        root_ids
         chunk_num: The chunk number or index + 1
         num_chunks: Number of total chunks to split the roots
     Returns:

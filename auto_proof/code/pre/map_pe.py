@@ -1,27 +1,24 @@
 from auto_proof.code.pre import data_utils
 
-import os
-import pandas as pd
 import numpy as np
-from tqdm import tqdm
-import graph_tool.all as gt
-import h5py
-import json
-import sys
-import time
-import argparse
+import networkx as nx
+# import graph_tool.all as gt
 import torch
-import multiprocessing
 import glob
 
-def map_pe_wrapper(pos_enc_dim, root, edges):
+def map_pe_wrapper(pos_enc_dim, edges, num_vertices):
     """Creates Maximal Axis Projection (MAP) Positional Encodings
 
     Copied from, make sure to cite:
     https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
     """
     try:
-        g = gt.Graph(edges, directed=False)
+        g = nx.Graph()
+        g.add_nodes_from(range(num_vertices))
+        g.add_edges_from(edges)
+        # print("nodes order nx", g.nodes())
+        # g = gt.Graph(edges, directed=False)
+        # print("nodes order gt", list(g.vertices()))
         map_pe = map_positional_encoding(g, True, True, True, pos_enc_dim)
         return True, None, map_pe.numpy()
             
@@ -35,10 +32,12 @@ def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_
     Copied from, make sure to cite:
     https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
     """
-    A = gt.adjacency(g).astype(np.double)
+    # A = gt.adjacency(g).astype(np.double)
+    A = nx.adjacency_matrix(g).astype(np.double)
     A = torch.from_numpy(A.toarray()).double()
     # print("A", A)
     A = normalize_adjacency(A)
+    # print("A normalized", A)
     # A = np.array([[0, 1, 0, 1],
     #               [1, 0, 1, 0],
     #               [0, 1, 0, 1],

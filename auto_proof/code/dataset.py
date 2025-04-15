@@ -15,18 +15,17 @@ import neptune
 class AutoProofDataset(Dataset):
     def __init__(self, config, mode):
         self.config = config
-        # 'root' is all, 'train', 'val', 'test'
-        self.roots = data_utils.load_txt(config['data'][f'{mode}_path'])
-        # self.seed_index = config['loader']['seed_index']
+        self.data_dir = config['data']['data_dir']
+        mat_version_start = config['client']['mat_version_start']
+        mat_version_end = config['client']['mat_version_end']
+        self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
+        self.roots = data_utils.load_txt(f'{self.roots_dir}{config['data'][f'{mode}_roots']}')
+        self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}{mat_version_end}/'
+        self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
+        self.proofread_roots = data_utils.load_txt(f'{self.data_dir}{config['data']['proofread_dir']}{config['data']['proofread_roots']}')
+       
         self.fov = config['loader']['fov']
-        # self.num_shards = config['data']['num_shards']
-        self.features_dir = config['data']['features_dir']
-        self.map_pe_dir = config['data']['map_pe_dir']
-        self.dist_dir = config['data']['dist_dir']
-        self.rank_dir = config['data']['rank_dir']
         self.box_cutoff = config['data']['box_cutoff']
-        # self.shard_features = config['data']['shard_features']
-        # self.features_sharded_dir = config['data']['features_sharded_dir']
 
     def __len__(self):
         return len(self.roots)
@@ -41,9 +40,8 @@ class AutoProofDataset(Dataset):
     
     # TODO: Change how this works because it won't work anymore
     def get_is_proofread(self, root):
-        data_path = f'{self.features_dir}{root}.hdf5'
-        with h5py.File(data_path, 'r') as f:
-            return f['is_proofread'][()]
+        root_without_ident = root[:-4]
+        return root_without_ident in self.proofread_roots        
 
     def get_num_initial_vertices(self, root):
         data_path = f'{self.features_dir}{root}.hdf5'
@@ -52,65 +50,37 @@ class AutoProofDataset(Dataset):
 
     def __getitem__(self, index):
         root = self.roots[index]
-        data_path = f'{self.features_dir}{root}.hdf5'
-        map_pe_path = f'{self.map_pe_dir}map_{root}.hdf5'
-        dist_path = f'{self.dist_dir}dist_{root}.hdf5'
-        rank_path = f'{self.rank_dir}rank_{root}.hdf5'
-        # NOTE: Sharded features don't have proofread roots in them
-        # if self.shard_features: 
-        #     shard_id = hash_shard(root, self.num_shards)
-        #     data_path = f'{self.features_sharded_dir}{shard_id}.hdf5'
+        feature_path = f'{self.features_dir}{root}.hdf5'
+        labels_path = f'{self.labels_dir}{root}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as f, h5py.File(map_pe_path, 'r') as map_pe_file, h5py.File(dist_path, 'r') as dist_file, h5py.File(rank_path, 'r') as rank_file:
-                # f = shard_file
-                # if self.shard_features:
-                #     f = shard_file[str(root)]
-                vertices = torch.from_numpy(f['vertices'][:])
-                # Shouldn't be using compartment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # compartment = torch.from_numpy(f['compartment'][:]).unsqueeze(1)
-                radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
-                labels = torch.from_numpy(f['label'][:]).unsqueeze(1).int()
-                # print("original labels", labels)
-                confidence = torch.from_numpy(f['confidence'][:]).unsqueeze(1).int()
-                # print("num_initial_vertices", f['num_initial_vertices'][()])
+            with h5py.File(feature_path, 'r') as feat_f,  h5py.File(labels_path, 'r') as labels_f:
+                vertices = torch.from_numpy(feat_f['vertices'][:])
+                pos_enc = torch.from_numpy(feat_f['map_pe'][:])
 
-                pos_enc = torch.from_numpy(map_pe_file['map_pe'][:])
-                # pos_enc = torch.from_numpy(f['pos_enc'][:])
+                rank = torch.from_numpy(feat_f[f'rank'][:]).unsqueeze(1)
+                radius = torch.from_numpy(feat_f['radius'][:]).unsqueeze(1)
+                edges = feat_f['edges'][:]
 
-                # If doing the default features, need to set confidence to 1 where labels are 0
-                # if not self.shard_features:
-                #     confidence[labels == 0] = 1
-
-                # Not adding rank as a feature
-                # rank_num = f'rank_{self.seed_index}'
-                # rank = torch.from_numpy(f[rank_num][:])
-                rank = torch.from_numpy(rank_file[f'rank_{self.box_cutoff}'][:]).unsqueeze(1)
-
-                dist_to_error = torch.from_numpy(dist_file['dist'][:]).unsqueeze(1)
+                dist_to_error = torch.from_numpy(labels_f['dist'][:]).unsqueeze(1)
+                labels = torch.from_numpy(labels_f['labels'][:]).unsqueeze(1)
+                confidences = torch.from_numpy(labels_f['confidences'][:]).unsqueeze(1)
 
                 size = len(vertices)
 
-                # Currently concatenating the pos enc to node features
-                # Should remove the ones if not going to predict the padded ones
-                # SHOULD REMOVE THE ONES NOW SINCE I USE -1 later to indicate that the label is padded anyway
-                # input = torch.cat((vertices, compartment, radius, pos_enc, torch.ones(size, 1)), dim=1)
-                # No longer use compartment or the ones
                 input = torch.cat((vertices, radius, pos_enc), dim=1)
-
-                edges = f['edges'][:]
 
                 if size > self.fov:
                     indices = torch.where(rank < self.fov)[0]
                     input = input[indices]
                     labels = labels[indices]
-                    confidence = confidence[indices]
+                    confidences = confidences[indices]
                     dist_to_error = dist_to_error[indices]
                     rank = rank[indices]
                     edges = prune_edges(edges, indices)
                 elif(size < self.fov):
                     input = torch.cat((input, torch.zeros((self.fov - size, input.shape[1]))), dim=0)
                     labels = torch.cat((labels, torch.full((self.fov - size, 1), -1)))
-                    confidence = torch.cat((confidence, torch.full((self.fov - size, 1), -1)))
+                    confidences = torch.cat((confidences, torch.full((self.fov - size, 1), -1)))
                     dist_to_error = torch.cat((dist_to_error, torch.full((self.fov - size, 1), -1)))
                     rank = torch.cat((rank, torch.full((self.fov - size, 1), -1)))
 
@@ -119,7 +89,7 @@ class AutoProofDataset(Dataset):
             print("root: ", root, "error: ", e)
             return None
             
-        return root, input, labels, confidence, dist_to_error, rank, adj
+        return root, input, labels, confidences, dist_to_error, rank, adj
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)
@@ -128,6 +98,7 @@ class AutoProofDataset(Dataset):
 #     return shard_id
 
 # Always adds in diagonals as self edges/loops
+# Returns a torch tensor
 def edge_list_to_adjency(edges, size, fov):
     adj = torch.zeros((fov, fov))
     adj[edges[:, 0], edges[:, 1]] = 1
