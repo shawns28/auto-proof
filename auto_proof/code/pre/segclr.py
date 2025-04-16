@@ -49,6 +49,7 @@ def run_segclr():
 
     # NOTE: This is for 943 specifically
     filesystem = gcsfs.GCSFileSystem(token='anon')
+    # NOTE: Removing the / at the end so check if it makes a difference
     url = 'gs://iarpa_microns/minnie/minnie65/embeddings_m943/segclr_nm_coord_public_offset_csvzips/'
 
     num_shards = 50_000

@@ -4,12 +4,6 @@
         "num_chunks": 24,
         "num_processes": 30
     },
-    "client": {
-        "datastack_name": "minnie65_phase3_v1",
-        "my_token": "64df9664ce8a28852ee99167c26a9e8d",
-        "mat_version_start": 343,
-        "mat_version_end": 1300
-    },
     "raw_edits": {
         "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.feather",
         "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.npy",
@@ -19,8 +13,8 @@
     "proofread": {
         "proofread_dir": "proofread/",
         "post_proofread_roots": "post_proofread_roots.txt",
-        "943_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.csv",
-        "1300_csv": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.csv",
+        "csv_943": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.csv",
+        "csv_143": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.csv",
         "mat_versions": [943, 1300],
         "copy_count": 20
     },
@@ -48,11 +42,14 @@
         "resolution": [8, 8, 40]
     },
     "segclr": {
-        "url_343": "",
-        "url_943": "",
-        "url_1300": "",
-        "roots_at_segclr_dir": "",
-        "segclr_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_emb/"
+        "url_343": "gs://iarpa_microns/minnie/minnie65/embeddings_m343/segclr_nm_coord_public_offset_csvzips",
+        "bytewidth_343": 64,
+        "num_shards_343": 10000,
+        "url_943": "gs://iarpa_microns/minnie/minnie65/embeddings_m943/segclr_nm_coord_public_offset_csvzips",
+        "bytewidth_943": 8,
+        "num_shards_943": 50000,
+        "roots_at_segclr_dir": "roots_at_segclr/",
+        "segclr_dir": "segclr/"
     }
     
 }

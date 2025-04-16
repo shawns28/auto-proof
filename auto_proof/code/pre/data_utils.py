@@ -4,27 +4,24 @@ import pickle
 import json
 import argparse
 
-DATA_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/pre/data_config.json'
-CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json'
-def get_config():
-    """Initializes base config.
+CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/configs/base_config.json'
+DATA_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/configs/data_config.json'
+ClIENT_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/configs/client_config_personal.json'
+# ClIENT_CONFIG_PATH = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/code/configs/client_config.json'
 
-    Returns:
-        config: base config
-    """
-    with open(CONFIG_PATH, 'r') as f:
-        config = json.load(f)
-    return config
+def get_config(config_type):
+    if config_type == 'base':
+        with open(CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    elif config_type == 'data':
+        with open(DATA_CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    elif config_type == 'client':
+        with open(CLIENT_CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    else:
+        raise Exception("Invalid config type")
 
-def get_data_config():
-    """Initializes data config for pre-processing.
-    
-    Returns:
-        data_config: base data config
-    """
-    with open(DATA_CONFIG_PATH, 'r') as f:
-        data_config = json.load(f)
-    return data_config
 
 def create_client(config):
     """Initialize client and return it as well as relevant info.
@@ -36,9 +33,10 @@ def create_client(config):
     """
     datastack_name = config["client"]["datastack_name"]
     my_token = config["client"]["my_token"]
-    mat_version = config["client"]["mat_version_end"]
-    client = CAVEclient(datastack_name=datastack_name, auth_token=my_token, version=mat_version)
-    return client
+    mat_version_start = config["client"]["mat_version_start"]
+    mat_version_end = config["client"]["mat_version_end"]
+    client = CAVEclient(datastack_name=datastack_name, auth_token=my_token, version=mat_version_end)
+    return client, datastack_name, mat_version_start, mat_version_end
 
 def save_pickle_dict(filepath, dict):
     """Saves dictionary as pickle file at filepath

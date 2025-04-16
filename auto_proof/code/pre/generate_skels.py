@@ -10,14 +10,15 @@ def main(data_config):
         TODO: Fill in
         TODO: Assuming that roots passed in already includes the proofread root list, add this logic to process raw edits
     """
+    data_config = data_utils.get_config('data')
+    client_config = data_utils.get_config('client')
 
     data_dir = data_config['data_dir']
     features_dir = f'{data_dir}{data_config['features']['features_dir']}'
     if not os.path.exists(features_dir):
         os.makedirs(features_dir)
 
-    mat_version_start = data_config['client']['mat_version_start']
-    mat_version_end = data_config['client']['mat_version_end']
+    client, datastack_name, mat_version_start, mat_version_end = data_utils.create_client(client_config)
     roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
 
     roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt")
@@ -26,9 +27,8 @@ def main(data_config):
     # roots = ['864691135865167998_000'] # proofread
     # roots = ['864691135155575396_000', '864691135865167998_000']
 
-    client = data_utils.create_client(data_config)
-    datastack_name = data_config['client']['datastack_name']
-    skeleton_version = data_config['features']['skeleton_version']
+    
+    skeleton_version = client_config['features']['skeleton_version']
 
     print("roots original len", len(roots))
     files = glob.glob(f'{features_dir}*')
@@ -55,5 +55,4 @@ def main(data_config):
     print("time total for generate", time_total)
 
 if __name__ == "__main__":
-    data_config = data_utils.get_data_config()
-    main(data_config)
+    main()

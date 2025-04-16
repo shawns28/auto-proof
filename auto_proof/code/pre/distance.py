@@ -9,11 +9,10 @@ import os
 import h5py
 import argparse
 
-def create_dist(root, data_config, labels):
+def create_dist(root, feature_path, labels):
     """
     TODO: Fill in
     """
-    feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
     with h5py.File(feature_path, 'r') as f:
         edges = f['edges'][:]
         g = nx.Graph()

@@ -9,21 +9,21 @@ import multiprocessing
 from datetime import timedelta
 import argparse
 
-def process_raw_edits(data_config):
+def process_raw_edits():
     """Converts the raw edit history into usable dictionaries containing relevent information. 
     TODO: Fill in
 
     Creates initial root list and root to representative coordinate dict
     """
+    data_config = data_utils.get_config('data')
+    client_config = data_utils.get_config('client')
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num_processes", help="num processes")
     args = parser.parse_args()
     if args.num_processes:
         data_config['multiprocessing']['num_processes'] = int(args.num_processes)
     
-    client = data_utils.create_client(data_config)
-    mat_version_start = data_config['client']['mat_version_start']
-    mat_version_end = data_config['client']['mat_version_end']
+    client, _, mat_version_start, mat_version_end = data_utils.create_client(client_config)
     data_dir = data_config['data_dir']
 
     splitlog_dir = f'{data_dir}splitlog_{mat_version_start}_{mat_version_end}/'
@@ -252,5 +252,4 @@ def save_root_id_to_rep_coords(op_to_rep_coords, op_to_pre_edit_roots, save_path
     data_utils.save_pickle_dict(save_path, root_id_to_rep_coords_dict)
 
 if __name__ == "__main__":
-    data_config = data_utils.get_data_config()
-    process_raw_edits(data_config)
+    process_raw_edits()

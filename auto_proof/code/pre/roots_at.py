@@ -6,8 +6,7 @@ import time
 from cloudvolume import CloudVolume
 import time
 
-def get_roots_at(root, data_config, cv_seg, resolution):
-    feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
+def get_roots_at(feature_path, cv_seg, resolution):
     with h5py.File(feature_path, 'r') as f:
         vertices = f['vertices'][:]
         vertices = vertices / resolution

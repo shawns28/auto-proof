@@ -6,20 +6,19 @@ import h5py
 import networkx as nx
 
 
-def create_labels(root, root_at_arr, edges, data_config):
+def create_labels(root, root_at_arr, feature_path, proofread_roots_path):
     '''Creates labels, confidences and positional encodings
     
     TODO: Fill in 
     Assumes root_to_arr has roots that don't have identifiers
     '''
-    feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
     with h5py.File(feature_path, 'r') as f:
         edges = f['edges'][:]
         g = nx.Graph()
         g.add_nodes_from(range(len(root_at_arr)))
         g.add_edges_from(edges)
         labels = get_labels(g, root_at_arr)
-        confidences = get_confidences(data_config, root_at_arr, labels)
+        confidences = get_confidences(root_at_arr, labels, proofread_roots_path)
         return labels, confidences
 
 def get_labels(g, root_at_arr):
@@ -32,10 +31,8 @@ def get_labels(g, root_at_arr):
                 break
     return labels
 
-def get_confidences(data_config, root_at_arr, labels):
-    mat_version1 = data_config['proofread']['mat_versions'][0]
-    mat_version2 = data_config['proofread']['mat_versions'][1]
-    proofread_roots = data_utils.load_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_{mat_version2}.txt')
+def get_confidences(root_at_arr, labels, proofread_roots_path):
+    proofread_roots = data_utils.load_txt(proofread_roots_path)
     conf = np.isin(root_at_arr, proofread_roots)
     # Confidence at errors should be True
     conf[labels == True] = True

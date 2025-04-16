@@ -31,7 +31,7 @@ def main():
         tags=[f'{ram_alloc}gb', f'{fov}fov', gpu], 
         dependencies="infer",
         monitoring_namespace="monitoring",
-        source_files=["auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/code/object_detection.py", "auto_proof/base_config.json"],
+        source_files=["auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/code/object_detection.py", "auto_proof/configs/base_config.json"],
     )
 
     recall_targets = config["trainer"]["recall_targets"]

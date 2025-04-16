@@ -11,17 +11,19 @@ import time
 import argparse
 import multiprocessing
 from cloudvolume import CloudVolume
+import glob
 
-
-def main(data_config):
+def main():
     """
         TODO: Fill in
     """
+    data_config = data_utils.get_config('data')
+    client_config = data_utils.get_config('client')
     data_config, chunk_num, num_chunks, num_processes = data_utils.get_num_chunk_and_processes(data_config)
 
     data_dir = data_config['data_dir']
-    mat_version_start = data_config['client']['mat_version_start']
-    mat_version_end = data_config['client']['mat_version_end']
+    mat_version_start = client_config['client']['mat_version_start']
+    mat_version_end = client_config['client']['mat_version_end']
     roots_dir = f'{data_config['data_dir']}roots_{mat_version_start}_{mat_version_end}/'
     latest_version = data_config['labels']['latest_mat_version']
     labels_at_latest_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{latest_version}/'
@@ -60,20 +62,25 @@ def process_root(data):
     if os.path.exists(labels_at_latest_path) and os.path.exists(roots_at_latest_path):
         return
 
+    feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
+    
     # root at latest
     seg_path = data_config['segmentation'][f'precomputed_{latest_version}']
     cv_seg = CloudVolume(seg_path, use_https=True)
     resolution = np.array(data_config['segmentation']['resolution'])
-    status, e, root_at_arr = get_roots_at(root, data_config, cv_seg, resolution)
+    status, e, root_at_arr = get_roots_at(feature_path, cv_seg, resolution)
     if status == False:
         print("Failed to get roots at for root", root, "eror:", e)
         return
 
     # labels
-    labels, confidences = create_labels(root, root_at_arr, data_config, data_config)
+    proofread_mat_version1 = data_config['proofread']['mat_versions'][0]
+    proofread_mat_version2 = data_config['proofread']['mat_versions'][1]
+    proofread_roots_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}.txt'
+    labels, confidences = create_labels(root, root_at_arr, feature_path, proofread_roots_path)
 
     # distance to error
-    dist = create_dist(root, data_config, labels)
+    dist = create_dist(root, feature_path, labels)
 
     # Save roots at and labels, confidences, dist
     with h5py.File(roots_at_latest_path, 'a') as roots_at_f, h5py.File(labels_at_latest_path, 'a') as labels_f:
@@ -83,5 +90,4 @@ def process_root(data):
         labels_f.create_dataset('dist', data=dist)
 
 if __name__ == "__main__":
-    data_config = data_utils.get_data_config()
-    main(data_config)
+    main()

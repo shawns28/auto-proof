@@ -3,22 +3,20 @@ from auto_proof.code.pre import data_utils
 import pandas as pd
 import numpy as np
 
-def convert_proofread_csv_to_txt(data_config, mat_version):
+def convert_proofread_csv_to_txt(proofread_csv, proofread_root_path):
     """Converts proofread csv to txt.
     
     Args:
-        data_config
-        mat_version: Identifier for which proofread csv to convert
+        TODO: fill in
+        
     Returns:
         roots converted
     """
-    proofread_csv = data_config['proofread'][f'{mat_version}_csv']
     df = pd.read_csv(proofread_csv)
     filtered_df = df[df['status_axon'] != 'non']
     root_ids = filtered_df['root_id']
     root_ids = [str(root) for root in root_ids]
     root_ids_array = np.array(root_ids)
-    proofread_root_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version}.txt'
     data_utils.save_txt(proofread_root_path, root_ids_array)
     return root_ids
 

@@ -1,5 +1,6 @@
 /auto_proof/data/
 /auto_proof/test_data/
+/auto_proof/configs/client_config_personal.json
 .vscode
 *.DS_Store
 **/__pycache__/

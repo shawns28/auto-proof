@@ -14,12 +14,6 @@
         "mat_version_end": 1300,
         "box_cutoff": 100
     },
-    "client": {
-        "datastack_name": "minnie65_phase3_v1",
-        "my_token": "64df9664ce8a28852ee99167c26a9e8d",
-        "mat_version_start": 343,
-        "mat_version_end": 1300
-    },
     "loader": {
         "num_workers": 32,
         "prefetch_factor": 0,

@@ -10,18 +10,19 @@ import multiprocessing
 import glob
 import time
 
-def main(data_config):
+def main():
     """
         TODO: Fill in
         TODO: Assuming that roots passed in already includes the proofread root list, add this logic to process raw edits
     """
-
+    data_config = data_utils.get_config('data')
+    client_config = data_utils.get_config('client')
     data_config, chunk_num, num_chunks, num_processes = data_utils.get_num_chunk_and_processes(data_config)
 
     data_dir = data_config['data_dir']
-    mat_version_start = data_config['client']['mat_version_start']
-    mat_version_end = data_config['client']['mat_version_end']
-    roots_dir = f'{data_config['data_dir']}roots_{mat_version_start}_{mat_version_end}/'
+    client, datastack_name, mat_version_start, mat_version_end = data_utils.create_client(client_config)
+
+    roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
     dicts_dir = f'{data_dir}dicts_{mat_version_start}_{mat_version_end}/'
     features_dir = f'{data_dir}{data_config['features']['features_dir']}'
     if not os.path.exists(features_dir):
@@ -39,8 +40,7 @@ def main(data_config):
 
     root_to_rep_coord = data_utils.load_pickle_dict(f'{dicts_dir}{data_config['raw_edits']['root_to_rep']}')
     # proofread_roots = data_utils.load_txt(data_config['raw_edits']['proofread_roots'])
-    client = data_utils.create_client(data_config)
-    datastack_name = data_config['client']['datastack_name']
+
     skeleton_version = data_config['features']['skeleton_version']
 
     # TODO: Change after using
@@ -85,7 +85,7 @@ def main(data_config):
         else:
             print("root has a coord", root)
             rep = root_to_rep_coord[root_without_identifier]
-        args_list.append((root, data_config, rep, client))
+        args_list.append((root, data_config, rep, client, datastack_name))
 
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
         for _ in pool.imap_unordered(process_root_features, args_list):
@@ -99,7 +99,7 @@ def process_root_features(data):
     """
        TODO: Fill in
     """
-    root, data_config, rep, client = data
+    root, data_config, rep, client, datastack_name = data
     if rep is None:
         is_proofread = True
     else:
@@ -111,7 +111,7 @@ def process_root_features(data):
         return
 
     # Skeletonize
-    status, e, skel_dict = get_skel(data_config['client']['datastack_name'], data_config['features']['skeleton_version'], root, client)
+    status, e, skel_dict = get_skel(datastack_name, data_config['features']['skeleton_version'], root, client)
     if status == False:
         print("Failed to get skel for root", root, "eror:", e)
         return
@@ -135,5 +135,4 @@ def process_root_features(data):
             feat_f.create_dataset(feature, data=feature_dict[feature])
 
 if __name__ == "__main__":
-    data_config = data_utils.get_data_config()
-    main(data_config)
+    main()

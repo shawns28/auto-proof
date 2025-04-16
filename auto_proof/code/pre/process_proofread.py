@@ -8,12 +8,14 @@ import h5py
 import multiprocessing
 import glob
 
-def main(data_config):
+def main():
     """
         TODO: Fill in
     """
-    mat_version_start = data_config['client']['mat_version_start']
-    mat_version_end = data_config['client']['mat_version_end']
+    data_config = data_utils.get_config('data')
+    client_config = data_utils.get_config('client')
+    mat_version_start = client_config['client']['mat_version_start']
+    mat_version_end = client_config['client']['mat_version_end']
     roots_dir = f'{data_config['data_dir']}roots_{mat_version_start}_{mat_version_end}/'
     roots = data_utils.load_txt(f'{roots_dir}{data_config['raw_edits']['post_raw_edit_roots']}')
     print("roots len", len(roots))
@@ -21,7 +23,9 @@ def main(data_config):
     mat_versions = data_config['proofread']['mat_versions']
     mat_dict = {}
     for mat_version in mat_versions:
-        mat_dict[mat_version] = proofread_utils.convert_proofread_csv_to_txt(data_config, mat_version)
+        proofread_csv = data_config['proofread'][f'csv_{mat_version}']
+        proofread_root_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version}.txt'
+        mat_dict[mat_version] = proofread_utils.convert_proofread_csv_to_txt(proofread_csv, proofread_root_path)
         print("mat version", mat_version, "len", len(mat_dict[mat_version]))
     
     combined_proofread_roots = proofread_utils.combine_proofread_roots(mat_dict)
@@ -64,5 +68,4 @@ def main(data_config):
     data_utils.save_txt(f'{roots_dir}{data_config['proofread']['post_proofread_roots']}', roots)
 
 if __name__ == "__main__":
-    data_config = data_utils.get_data_config()
-    main(data_config)
+    main()
