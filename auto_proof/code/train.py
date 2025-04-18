@@ -30,9 +30,10 @@ class Trainer(object):
 
         self.data_dir = config['data']['data_dir']
         self.box_cutoff = config['data']['box_cutoff']
-        mat_version_start = config['client']['mat_version_start']
-        mat_version_end = config['client']['mat_version_end']
+        mat_version_start = config['data']['mat_version_start']
+        mat_version_end = config['data']['mat_version_end']
         self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
+        self.split_dir = f'{self.roots_dir}{config['data']['split_dir']}'
 
         # Datasets
         self.train_dataset = train_dataset
@@ -65,7 +66,7 @@ class Trainer(object):
         self.tolerance_weight = config['trainer']['tolerance_weight']
         self.box_weight = config['trainer']['box_weight']
 
-        self.obj_det_val_roots = set(data_utils.load_txt(f'{self.roots_dir}{config['data']['obj_det_val_roots']}'))
+        self.obj_det_val_roots = set(data_utils.load_txt(f'{self.split_dir}{config['data']['obj_det_val_roots']}'))
 
         ### trainings params
         self.epochs = config['optimizer']['epochs']

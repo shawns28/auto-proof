@@ -20,66 +20,11 @@ from auto_proof.code.connectomics.sharding import md5_shard
 import gcsfs
 from scipy.spatial import cKDTree
 
-def run_segclr():
-    data_config = data_utils.get_data_config()
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--chunk_num", help="chunk num")
-    parser.add_argument("-n", "--num_processes", help="num processes")
-    args = parser.parse_args()
-    if args.num_processes:
-        data_config['multiprocessing']['num_processes'] = int(args.num_processes)
-    chunk_num = 1
-    num_chunks = data_config['multiprocessing']['num_chunks']
-    if args.chunk_num:
-        chunk_num = int(args.chunk_num)
-    else: # No chunking
-        num_chunks = 1
-
-    # roots = data_utils.load_txt(config['data']['root_path'])
-    # roots = ['864691135591041291_000'] # proofread at 943
-    # roots = ['864691135463333789_000']
-    roots = ['']
-    # roots = ['864691135937424949_000'] # size 7
-    roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
-
-    num_processes = data_config['multiprocessing']['num_processes']
-    features_directory = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/features/"
-    root_at_directory = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_1300/"
-    mat = 943
-
-    # NOTE: This is for 943 specifically
-    filesystem = gcsfs.GCSFileSystem(token='anon')
-    # NOTE: Removing the / at the end so check if it makes a difference
-    url = 'gs://iarpa_microns/minnie/minnie65/embeddings_m943/segclr_nm_coord_public_offset_csvzips/'
-
-    num_shards = 50_000
-    bytewidth = 8
-    embedding_reader = EmbeddingReader(filesystem, url, sharder, num_shards, bytewidth)
-
-    # filesystem = gcsfs.GCSFileSystem(token='anon')
-    # url = 'gs://iarpa_microns/minnie/minnie65/embeddings_m1300/segclr_nm_coord_public_offset_csvzips/'
-
-    # num_shards = 50_000
-    # bytewidth = 8
-    # embedding_reader = EmbeddingReader(filesystem, url, sharder, num_shards, bytewidth)
-
-    args_list = list([(root, features_directory, root_at_directory, mat, embedding_reader) for root in roots])
-
-    # with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
-    #     for _ in pool.imap_unordered(segclr_one_root, args_list):
-    #         pbar.update() 
-    
-    segclr(args_list[0])
-
-def segclr(data):
-    root, features_directory, root_at_directory, mat, embedding_reader = data
-    root_feat_path = f'{features_directory}{root}.hdf5'
-    root_at_path = f'{root_at_directory}{root}.hdf5'
-    with h5py.File(root_feat_path, 'r') as feat_f, h5py.File(root_at_path, 'r') as at_f:
+def get_segclr_emb(root, feature_path, root_at_arr, embedding_reader, emb_dim):
+    with h5py.File(feature_path, 'r') as feat_f:
         vertices = feat_f['vertices'][:]
         edges = feat_f['edges'][:]
         print("num vertice", vertices.shape)
-        roots_at_mat = at_f[f'roots_at'][:]
 
         # Testing max distance of vertices
         max_dist = 0
@@ -89,14 +34,13 @@ def segclr(data):
             max_dist = max(max_dist, dd[1])
         print("max dist in vertices", max_dist)
 
-        roots_at_mat_to_indices = create_root_at_mat_dict(roots_at_mat)
-        # print("roots_at_mat_to_indices", roots_at_mat_to_indices)
+        roots_at_to_indices = create_root_at_dict(root_at_arr)
 
         # Create a map from root_943 to list of vertice indices
         # This way we can process each root_943 at a time and get rid of embeddings after
 
-        result = np.zeros((len(vertices), 128))
-        for root in roots_at_mat_to_indices:
+        result = np.zeros((len(vertices), emb_dim))
+        for root in roots_at_to_indices:
             embs = embedding_reader[root]
 
             # Convert to using the actual indices
@@ -110,12 +54,12 @@ def segclr(data):
             print("emb vals shape", emb_vals.shape)
 
             # radius = 2000 # 2 um
-            radius = 3000
+            # radius = 3000
             # radius = 300
-            # radius = 500
+            radius = 500
             tree = cKDTree(coords)
 
-            for index in roots_at_mat_to_indices[root]:
+            for index in roots_at_to_indices[root]:
                 vertice = vertices[index]
                 # print("coords at index", vertices[index], index)
                 # query with a max distance
@@ -132,20 +76,21 @@ def segclr(data):
                 if len(q_indices) == 0:
                     print("Nothing within radius of:", radius)
 
-                result[index] = np.mean([emb_vals[q_ind] for q_ind in q_indices], axis=0)
+                result[index] = np.mean([emb_vals[q_ind][:emb_dim] for q_ind in q_indices], axis=0)
                 #TODO: Need to get an array that has the vertices of the segclr nodes, might need to visualize a subset if its not able to visualize all the points
         print("result shape", result.shape)
-        path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
-        visualize_segclr(vertices, edges, res, path)
+        # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
+        # visualize_segclr(vertices, edges, res, path)
+        return True, None, result
 
-def create_root_at_mat_dict(roots_at_mat):
-    roots_at_mat_to_indices = {}
-    for i in range(len(roots_at_mat)):
-        root = int(roots_at_mat[i])
-        if root not in roots_at_mat_to_indices:
-            roots_at_mat_to_indices[root] = []
-        roots_at_mat_to_indices[root].append(i)
-    return roots_at_mat_to_indices
+def create_root_at_dict(roots_at):
+    roots_at_to_indices = {}
+    for i in range(len(roots_at)):
+        root = int(roots_at[i])
+        if root not in roots_at_to_indices:
+            roots_at_to_indices[root] = []
+        roots_at_to_indices[root].append(i)
+    return roots_at_to_indices
 
 def sharder(segment_id: int, num_shards, bytewidth) -> int:
     return md5_shard(segment_id, num_shards=num_shards, bytewidth=bytewidth)

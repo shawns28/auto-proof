@@ -5,8 +5,8 @@
         "num_processes": 30
     },
     "raw_edits": {
-        "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.feather",
-        "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/240927/minnie_splitlog_240927.npy",
+        "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/250321/minnie_splitlog_250321.feather",
+        "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/250321/minnie_splitlog_250321.npy",
         "root_to_rep": "root_id_to_rep_coords.pkl",
         "post_raw_edit_roots": "post_edit_roots.txt"
     },
@@ -48,8 +48,15 @@
         "url_943": "gs://iarpa_microns/minnie/minnie65/embeddings_m943/segclr_nm_coord_public_offset_csvzips",
         "bytewidth_943": 8,
         "num_shards_943": 50000,
+        "emb_dim": 64,
         "roots_at_segclr_dir": "roots_at_segclr/",
-        "segclr_dir": "segclr/"
+        "segclr_dir": "segclr/",
+        "post_segclr_roots": "post_segclr_roots.txt",
+        "mat_versions": [343, 943, 1300]
+    },
+    "split": {
+        "split": [0.8, 0.1, 0.1],
+        "split_dir": "split_"
     }
     
 }

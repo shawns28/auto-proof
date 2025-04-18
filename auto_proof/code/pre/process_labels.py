@@ -33,9 +33,11 @@ def main():
     if not os.path.exists(roots_at_latest_dir):
         os.makedirs(roots_at_latest_dir)
 
-    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
-    roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
+    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
     print("roots len", len(roots))
+    roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
+    print("chunk len", len(roots))
 
     # roots = ['864691137198915137_000', '864691135778235581_000', '864691135463333789_000']
 

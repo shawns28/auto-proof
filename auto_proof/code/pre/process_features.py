@@ -31,9 +31,9 @@ def main():
     # TODO: Change after using   
     #TODO: Should be able to load in all of the roots due to the check below and also checking if a root exists in the cache
     # roots = data_utils.load_txt(f'{roots_dir}{data_config['proofread']['post_proofread_roots']}')
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
     # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt")
-    # roots = data_utils.load_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{data_config['proofread']['post_proofread_roots']}')
+    roots = data_utils.load_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{data_config['proofread']['post_proofread_roots']}')
     # roots = ['864691135155575396_000'] # non proofread
     # roots = ['864691135865167998_000'] # proofread
     # roots = ['864691135155575396_000', '864691135865167998_000']
@@ -44,8 +44,8 @@ def main():
     skeleton_version = data_config['features']['skeleton_version']
 
     # TODO: Change after using
-    #post_generate_roots_path = f'{roots_dir}{data_config['features']['post_generate_roots']}'
-    post_generate_roots_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt"
+    post_generate_roots_path = f'{roots_dir}{data_config['features']['post_generate_roots']}'
+    # post_generate_roots_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt"
     if not os.path.exists(post_generate_roots_path):
         print("roots original len", len(roots))
         files = glob.glob(f'{features_dir}*')

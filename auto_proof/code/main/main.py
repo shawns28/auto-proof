@@ -9,7 +9,7 @@ import argparse
 import torch
 
 def main():
-    config = data_utils.get_config()
+    config = data_utils.get_config('base')
     ram_alloc = 16
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num_workers", help="num workers")

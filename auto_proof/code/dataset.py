@@ -16,11 +16,12 @@ class AutoProofDataset(Dataset):
     def __init__(self, config, mode):
         self.config = config
         self.data_dir = config['data']['data_dir']
-        mat_version_start = config['client']['mat_version_start']
-        mat_version_end = config['client']['mat_version_end']
+        mat_version_start = config['data']['mat_version_start']
+        mat_version_end = config['data']['mat_version_end']
         self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
-        self.roots = data_utils.load_txt(f'{self.roots_dir}{config['data'][f'{mode}_roots']}')
-        self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}{mat_version_end}/'
+        self.split_dir = f'{self.roots_dir}{config['data']['split_dir']}'
+        self.roots = data_utils.load_txt(f'{self.split_dir}{config['data'][f'{mode}_roots']}')
+        self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}'
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
         self.proofread_roots = data_utils.load_txt(f'{self.data_dir}{config['data']['proofread_dir']}{config['data']['proofread_roots']}')
        
@@ -62,8 +63,8 @@ class AutoProofDataset(Dataset):
                 edges = feat_f['edges'][:]
 
                 dist_to_error = torch.from_numpy(labels_f['dist'][:]).unsqueeze(1)
-                labels = torch.from_numpy(labels_f['labels'][:]).unsqueeze(1)
-                confidences = torch.from_numpy(labels_f['confidences'][:]).unsqueeze(1)
+                labels = torch.from_numpy(labels_f['labels'][:]).int().unsqueeze(1)
+                confidences = torch.from_numpy(labels_f['confidences'][:]).int().unsqueeze(1)
 
                 size = len(vertices)
 

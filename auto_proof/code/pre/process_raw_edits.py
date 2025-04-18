@@ -33,8 +33,8 @@ def process_raw_edits():
     if not os.path.exists(dicts_dir):
         os.makedirs(dicts_dir)
     roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
-    if not os.path.exists(dicts_dir):
-        os.makedirs(dicts_dir)
+    if not os.path.exists(roots_dir):
+        os.makedirs(roots_dir)
 
     root_ids_txt_path = f'{roots_dir}{data_config['raw_edits']['post_raw_edit_roots']}'
     root_id_to_rep_coords_path = f'{dicts_dir}{data_config['raw_edits']['root_to_rep']}'

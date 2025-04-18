@@ -63,6 +63,7 @@ def main():
     roots.extend(copied_roots)
     print("roots final len", len(roots))
 
+    data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_{mat_version2}_copied.txt', copied_roots)
     data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_{mat_version2}_changed.txt', changed_proofread_roots)
     data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_{mat_version2}.txt', combined_proofread_roots)
     data_utils.save_txt(f'{roots_dir}{data_config['proofread']['post_proofread_roots']}', roots)

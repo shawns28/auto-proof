@@ -20,10 +20,11 @@ class ObjectDetectionDataset(Dataset):
 
         # self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
-        self.features_dir = config['data']['features_dir']
-        self.rank_dir = config['data']['rank_dir']
-        self.thresholds = config['trainer']['thresholds']
+        self.data_dir = config['data']['data_dir']
+        self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
+        self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}'
         self.box_cutoff = config['data']['box_cutoff']
+        self.thresholds = config['trainer']['thresholds']
         self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
 
         self.roots = list(root_to_output.keys())
@@ -46,23 +47,23 @@ class ObjectDetectionDataset(Dataset):
     def __getitem__(self, index):
         root = self.roots[index]
         output = self.root_to_output[root]
-        data_path = f'{self.features_dir}{root}.hdf5'
-        rank_path = f'{self.rank_dir}rank_{root}.hdf5'
+        feature_path = f'{self.features_dir}{root}.hdf5'
+        labels_path = f'{self.labels_dir}{root}.hdf5'
         try:
-            with h5py.File(data_path, 'r') as f, h5py.File(rank_path, 'r') as rank_file:
-                labels = f['label'][:]
-                confidence = f['confidence'][:]
+            with h5py.File(feature_path, 'r') as feat_f, h5py.File(labels_path, 'r') as labels_f:
+                labels = labels_f['labels'][:]
+                confidences = labels_f['confidences'][:]
 
-                rank= rank_file[f'rank_{self.box_cutoff}'][:]
+                rank = feat_f['rank'][:]
 
-                edges = f['edges'][:]
+                edges = feat_f['edges'][:]
 
                 box_cutoff_nodes = rank < self.box_cutoff
 
                 if len(labels) > self.fov:
                     indices = np.where(rank < self.fov)[0]
                     labels = labels[indices]
-                    confidence = confidence[indices]
+                    confidences = confidences[indices]
                     edges = prune_edges(edges, indices)
                     box_cutoff_nodes = box_cutoff_nodes[indices]
 
@@ -78,11 +79,11 @@ class ObjectDetectionDataset(Dataset):
 
                 label_ccs = get_label_components(g, labels, box_cutoff_nodes)
                 
-                new_label_ccs, confidence = remove_isolated_errors(g, label_ccs, confidence)
+                new_label_ccs, confidences = remove_isolated_errors(g, label_ccs, confidences)
                 label_ccs = new_label_ccs
 
                 for threshold in self.thresholds:
-                    output_ccs = get_output_components(g, threshold_to_output[threshold], confidence)
+                    output_ccs = get_output_components(g, threshold_to_output[threshold], confidences)
                     output_ccs, conf_fp = remove_big_output_ccs(output_ccs, labels, self.obj_det_error_cloud_ratio, box_cutoff_nodes)
                     conf_tp, conf_fn = count_shared_and_unshared(label_ccs, output_ccs)
                     # if threshold == 0.5:
@@ -100,23 +101,23 @@ class ObjectDetectionDataset(Dataset):
 
 # If any error locations are isolated with no confident non errors nearby 
 # then remove from label cc list and mark them as unconfident so they get ignored in output prediction
-def remove_isolated_errors(graph, label_ccs, confidence):
+def remove_isolated_errors(graph, label_ccs, confidences):
     new_label_ccs = []
     for cc in label_ccs:
         is_isolated = True
         for node in cc:
             for neighbor in graph.adj[node]:
-                if neighbor not in cc and confidence[neighbor] == True:
+                if neighbor not in cc and confidences[neighbor] == True:
                     is_isolated = False
                     break
             if not is_isolated:
                 break
         if is_isolated:
             for node in cc:
-                confidence[node] = True
+                confidences[node] = True
         else:
             new_label_ccs.append(cc)
-    return new_label_ccs, confidence
+    return new_label_ccs, confidences
 
 def get_label_components(graph, labels, box_cutoff_nodes):
     # data=False since we don't need other attributes of the nodes after we do this
@@ -125,8 +126,8 @@ def get_label_components(graph, labels, box_cutoff_nodes):
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
-def get_output_components(graph, threshold_output, confidence):
-    subgraph_nodes = [i for i in range(len(confidence)) if (threshold_output[i] == True and confidence[i] == True)]
+def get_output_components(graph, threshold_output, confidences):
+    subgraph_nodes = [i for i in range(len(confidences)) if (threshold_output[i] == True and confidences[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
@@ -222,13 +223,14 @@ def get_precision_and_recall(tp, fn, fp):
     return precision, recall
 
 if __name__ == "__main__":
-    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
+    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
     run_id = 'AUT-255'
     run_dir = f'{ckpt_dir}{run_id}/'
     epoch = 30
     ckpt_path = f'{run_dir}model_{epoch}.pt'
-    with open(f'{run_dir}config.json', 'r') as f:
-        config = json.load(f)
+    # with open(f'{run_dir}config.json', 'r') as f:
+    #     config = json.load(f)
+    config = data_utils.get_config('base')
     
     model = create_model(config)
 
@@ -250,7 +252,7 @@ if __name__ == "__main__":
     data = AutoProofDataset(config, mode)
     config['loader']['batch_size'] = 32
     config['loader']['num_workers'] = 32
-    config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/conf_no_error_in_box_roots_val.txt"
+    config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
     config['trainer']['obj_det_error_cloud_ratio'] = 0.2
     config['data']['box_cutoff'] = 100
     data_loader = build_dataloader(config, data, mode)
@@ -262,16 +264,16 @@ if __name__ == "__main__":
         # for root in roots:
         #     print("Getting root output")
         #     # Remember this doesn't pre mask so only use things above fov for testing right now
-        #     vertices, edges, labels, confidence, output, _, _, _, _ = get_root_output(model, device, data, root)
+        #     vertices, edges, labels, confidences, output, _, _, _, _ = get_root_output(model, device, data, root)
         #     output = output.detach().cpu().numpy().squeeze(-1)
         #     root_to_output[root] = output
 
-        obj_det_val_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
+        obj_det_val_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"))
 
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-                roots, input, labels, confidence, dist_to_error, rank, adj = data
+                roots, input, labels, confidences, dist_to_error, rank, adj = data
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 input = input.float().to(device)
                 labels = labels.float().to(device)
@@ -311,7 +313,7 @@ if __name__ == "__main__":
         print("metrics at threshold 0.99", obj_det_data.__getmetrics__()[0.99])
 
         # save_dir = run_dir
-        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/'
+        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/obj_test/'
 
         save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, config['trainer']['obj_det_error_cloud_ratio'], config['data']['box_cutoff'])
     print("done")    
