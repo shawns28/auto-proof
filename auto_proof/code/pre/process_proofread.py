@@ -25,7 +25,8 @@ def main():
     for mat_version in mat_versions:
         proofread_csv = data_config['proofread'][f'csv_{mat_version}']
         proofread_root_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version}.txt'
-        mat_dict[mat_version] = proofread_utils.convert_proofread_csv_to_txt(proofread_csv, proofread_root_path)
+        mat_dict[mat_version] = proofread_utils.convert_proofread_csv_to_txt(mat_version, proofread_csv)
+        data_utils.save_txt(proofread_root_path, mat_dict[mat_version])
         print("mat version", mat_version, "len", len(mat_dict[mat_version]))
     
     combined_proofread_roots = proofread_utils.combine_proofread_roots(mat_dict)
@@ -45,15 +46,18 @@ def main():
     unique_proofread_roots1 = [root for root in combined_proofread_roots if root in mat_dict[mat_version1]]
     print("len of unique_proofread_roots1", len(unique_proofread_roots1))
     data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_unique.txt', unique_proofread_roots1)
+    unique_proofread_roots1_copied = proofread_utils.make_copies_of_roots(unique_proofread_roots1, data_config['proofread']['copy_count'])
+    data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version1}_unique_copied.txt', unique_proofread_roots1_copied)
 
-    #NOTE: Change for more than 2 mat versions and if mat versions aren't 943 and 1300
-    mat_version2 = ""
-    if len(mat_versions) == 2:
-        mat_version2 = mat_versions[1]
-        unique_proofread_roots2 = [root for root in combined_proofread_roots if (root in mat_dict[mat_version2] and root not in unique_proofread_roots1)]
-        print("len of unique_proofread_roots2", len(unique_proofread_roots2))
-        data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version2}_unique.txt', unique_proofread_roots2)
-        assert len(unique_proofread_roots2) + len(unique_proofread_roots1) == len(combined_proofread_roots)
+
+    mat_version2 = mat_versions[1]
+    unique_proofread_roots2 = [root for root in combined_proofread_roots if (root in mat_dict[mat_version2] and root not in unique_proofread_roots1)]
+    print("len of unique_proofread_roots2", len(unique_proofread_roots2))
+    data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version2}_unique.txt', unique_proofread_roots2)
+    unique_proofread_roots2_copied = proofread_utils.make_copies_of_roots(unique_proofread_roots2, data_config['proofread']['copy_count'])
+    data_utils.save_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{mat_version2}_unique_copied.txt', unique_proofread_roots2_copied)
+
+    assert len(unique_proofread_roots2) + len(unique_proofread_roots1) == len(combined_proofread_roots)
 
     # TODO: Uncomment below to actually make copies
     copied_roots = proofread_utils.make_copies_of_roots(combined_proofread_roots, data_config['proofread']['copy_count'])

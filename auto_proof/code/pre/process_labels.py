@@ -33,8 +33,12 @@ def main():
     if not os.path.exists(roots_at_latest_dir):
         os.makedirs(roots_at_latest_dir)
 
-    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
+    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt")
+    # roots = ['864691136926085706_000']
+    # roots = ['864691136619433869_002']
+    # roots = ['864691135777645664_000']
     print("roots len", len(roots))
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
     print("chunk len", len(roots))
@@ -85,8 +89,10 @@ def process_root(data):
     dist = create_dist(root, feature_path, labels)
 
     # Save roots at and labels, confidences, dist
-    with h5py.File(roots_at_latest_path, 'a') as roots_at_f, h5py.File(labels_at_latest_path, 'a') as labels_f:
-        roots_at_f.create_dataset('roots_at', data=root_at_arr)
+    if not os.path.exists(roots_at_latest_path):
+        with h5py.File(roots_at_latest_path, 'a') as roots_at_f:
+            roots_at_f.create_dataset('roots_at', data=root_at_arr)
+    with h5py.File(labels_at_latest_path, 'a') as labels_f:
         labels_f.create_dataset('labels', data=labels)
         labels_f.create_dataset('confidences', data=confidences)
         labels_f.create_dataset('dist', data=dist)

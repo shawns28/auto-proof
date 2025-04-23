@@ -12,6 +12,7 @@ import argparse
 import os
 import glob
 import time
+import re
 
 def main():
     """
@@ -34,15 +35,14 @@ def main():
 
     post_label_roots = data_utils.load_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}')
     print("post_label_roots len", len(post_label_roots))
-    # TODO: Uncomment once segclr is done
-    # post_segclr_roots = data_utils.load_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}')
-    # print("post_segclr_roots len", len(post_segclr_roots))
-    # roots = np.intersect1d(post_label_roots, post_segclr_roots)
-    # print("roots len", len(roots))
-    roots = post_label_roots
+    
+    post_segclr_roots = data_utils.load_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}')
+    print("post_segclr_roots len", len(post_segclr_roots))
+    roots = np.intersect1d(post_label_roots, post_segclr_roots)
+    print("roots combined len", len(roots))
     roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
     roots = np.setdiff1d(roots, roots_1300_unique_copied)
-    print("roots len", len(roots))
+    print("final roots len", len(roots))
     split = data_config['split']['split']
     split_dir = f'{roots_dir}{data_config['split']['split_dir']}{len(roots)}/'
     split_dicts_dir = f'{split_dir}dicts/'
@@ -105,10 +105,11 @@ def main():
 
     proofread_mat_version1 = data_config['proofread']['mat_versions'][0]
     proofread_mat_version2 = data_config['proofread']['mat_versions'][1]
-    proofread_roots = data_utils.load_txt(f'{data_dir}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}_with_copies.txt')
+    proofread_roots = data_utils.load_txt(f'{data_dir}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}_copied.txt')
     
     val_roots_path = f'{split_dir}val_roots.txt'
-    if not os.path.exists(val_roots_path):
+    train_roots_path = f'{split_dir}train_roots.txt'
+    if not (os.path.exists(val_roots_path) and os.path.exists(train_roots_path)):
         print("Creating split")
         data_utils.save_txt(f'{split_dir}all_roots.txt', roots)
         start_time = time.time()
@@ -119,13 +120,17 @@ def main():
         print("Checking split")
         check_proofread_dist(proofread_roots, train_roots, val_roots, test_roots)
     else:
-        print("Loading val roots")
+        print("Loading val and train roots")
         val_roots = data_utils.load_txt(val_roots_path)
+        train_roots = data_utils.load_txt(train_roots_path)
     
     val_conf_no_error_in_box_roots_path = f'{split_dir}val_conf_no_error_in_box_roots.txt'
-    if not os.path.exists(val_conf_no_error_in_box_roots_path):
+    train_conf_no_error_in_box_roots_path = f'{split_dir}train_conf_no_error_in_box_roots.txt'
+    if not (os.path.exists(val_conf_no_error_in_box_roots_path) and os.path.exists(train_conf_no_error_in_box_roots_path)):
         print("Creating val_conf_no_error_in_box_roots")
         create_conf_no_error_in_box_roots(val_roots, features_dir, labels_dir, data_config['features']['box_cutoff'], num_processes, val_conf_no_error_in_box_roots_path)
+        print("Creating train_conf_no_error_in_box_roots")
+        create_conf_no_error_in_box_roots(train_roots, features_dir, labels_dir, data_config['features']['box_cutoff'], num_processes, train_conf_no_error_in_box_roots_path)
 
 def create_latest_set_dict(roots, roots_at_latest_dir, num_processes, save_path):
     root_to_latest_set = {}
@@ -289,7 +294,10 @@ def create_conf_no_error_in_box_roots(roots, features_dir, labels_dir, box_cutof
             if root != '':
                 conf_no_error_in_box.append(root)
             pbar.update()
-    data_utils.save_txt(conf_no_error_in_box_roots_path, conf_no_error_in_box)
+    print('conf_no_error_in_box len before fitering proofread copies', len(conf_no_error_in_box))
+    filtered_roots = [root for root in conf_no_error_in_box if re.search(r'_000$', root)]
+    print("conf_no_error_in_box len after filtering", len(filtered_roots))
+    data_utils.save_txt(conf_no_error_in_box_roots_path, filtered_roots)
 
 def __check_root__(data):
     root, features_dir, labels_dir, box_cutoff = data

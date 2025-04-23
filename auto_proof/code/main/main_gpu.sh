@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1            # blah
 #SBATCH -c32               # Need cores
 #SBATCH --mem=64gb                     # Job memory request (per node)
-#SBATCH --time=24:00:00             # Time limit hrs:min:sec
+#SBATCH --time=10:00:00             # Time limit hrs:min:sec
 #SBATCH -o /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/train_logs/%A_%a.out
 # %A" is replaced by the job ID and "%a" with the array index
 #SBATCH -e /allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/logs/train_logs/%A_%a.err

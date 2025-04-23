@@ -46,8 +46,8 @@ def get_root_output(model, device, data, root):
         vertices = input[:, :3]
         edges = adjency_to_edge_list_torch_skip_diag(adj)
 
-        config = data_utils.get_config()
-        client = data_utils.create_client(config)  
+        config = data_utils.get_config('client')
+        client, _, _, _ = data_utils.create_client(config)  
         cv = client.info.segmentation_cloudvolume(progress=False)
         root_without_num = int(root[:-4]) # Removing _000 for mesh retrieval
         mesh = cv.mesh.get(
@@ -162,45 +162,50 @@ def visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_er
     
     plotter.export_html(path)  
             
-def visualize_segclr(vertices, edges, segclr_nodes, path):
+def visualize_segclr(vertices, edges, segclr_nodes, too_far_small_radius_indices, too_far_large_radius_indices, path):
     pv.set_jupyter_backend('trame')
-    vertices = vertices.detach().cpu().numpy()
-    edges = edges.detach().cpu().numpy()
     lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
     skel_poly = pv.PolyData(vertices, lines=lines)
-
-    segclr_nodes = segclr_nodes.detach().cpu().numpy()
-    
     pv.start_xvfb()
-    plotter = pv.Plotter(shape="1/2", off_screen=True, border=True, border_color='black')
+    plotter = pv.Plotter(shape=(1, 2), off_screen=True, border=True, border_color='black')
     
-    plotter.subplot(0)
+    plotter.subplot(0, 0)
     plotter.add_mesh(skel_poly, color='black')
-    plotter.add_points(segclr_nodes, point_size=10, render_points_as_spheres=True, show_vertices=True)
+    plotter.add_points(segclr_nodes, point_size=5, render_points_as_spheres=True, show_vertices=True)
     
     plotter.camera.tight()
     plotter.subplot_border_visible = True
 
-    plotter.subplot(1)
-    vertices_output = vertices.copy()
-    skel_poly_output = pv.PolyData(vertices_output, lines=lines)
-    plotter.add_mesh(skel_poly_output, color='black')
-
+    plotter.subplot(0, 1)
+    plotter.add_mesh(skel_poly, color='black')
+    
+    in_range_points = vertices[np.logical_and(too_far_small_radius_indices == False, too_far_large_radius_indices == False)]
+    out_small_range_points = vertices[too_far_small_radius_indices]
+    out_large_range_points = vertices[too_far_large_radius_indices]
+    
+    if len(in_range_points):
+        plotter.add_points(in_range_points, point_size=5, color='green', render_points_as_spheres=True, show_vertices=True)
+    if len(out_small_range_points):
+        plotter.add_points(out_small_range_points, point_size=5, color='orange', render_points_as_spheres=True, show_vertices=True)
+    if len(out_large_range_points):
+        plotter.add_points(out_large_range_points, point_size=5, color='red', render_points_as_spheres=True, show_vertices=True)
     plotter.link_views()
     
-    plotter.export_html(path)  
+    plotter.export_html(path)
 
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
     # run_id = 'AUT-215'
-    run_id = 'AUT-255'
-    epoch = 30
+    # run_id = 'AUT-255'
+    run_id = 'AUT-272'
+    run_id = 'AUT-275' # First segclr
+    epoch = 5
     run_dir = f'{ckpt_dir}{run_id}/'
     # TODO: Uncomment below after segclr testing
-    # with open(f'{run_dir}config.json', 'r') as f:
-    #     config = json.load(f)
-    with open('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json', 'r') as f:
+    with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
+    # with open('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json', 'r') as f:
+    #     config = json.load(f)
 
     data = AutoProofDataset(config, 'all')
     # config['model']['depth'] = 3
@@ -245,12 +250,16 @@ if __name__ == "__main__":
     # with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(stuff)) as pbar:
     #     for root in pool.imap_unordered(visualize_root, stuff):
     #         pbar.update()
-    config['trainer']['visualize_cutoff'] = 9600
-    config['loader']['fov'] = 250
-    config['trainer']['show_tol'] = False
-    roots = ['864691135463333789_000']
-    roots = ['864691135778235581_000']
-
+    config['trainer']['visualize_cutoff'] = 4000
+    # config['loader']['fov'] = 250
+    # config['trainer']['show_tol'] = False
+    # roots = ['864691135463333789_000']
+    # roots = ['864691135778235581_000']
+    # roots = ['864691136227494225_000', '864691136227495761_000', '864691136912265969_000', '864691136926085706_000', '864691135777645664_000', '864691136619433869_002']
+    # roots = ['864691135361128519_000', '864691135374663666_000', '864691135387215745_000', '864691135395011829_000', '864691135441162824_000', '864691135447598932_000', '864691135463303486_000', '864691135476697512_000']
+    # roots = ['864691134940888163_000']
+    roots = ['864691136437067166_000', '864691136662768094_000', '864691136578169108_000', '864691136990572949_000', '864691136974211868_000', '864691134989119098_000', '864691135082409975_000']
+    roots = ['864691135324927034_000', '864691135327500274_000', '864691135328621376_000', '864691135335739881_000', '864691135335745769_000']
     # for i in range(10):
     for root in roots:
         # try:
@@ -261,10 +270,14 @@ if __name__ == "__main__":
         print("num_initial_vertice", num_initial_vertices, "for root", root)
         if num_initial_vertices < config['trainer']['visualize_cutoff']:
             print("getting root output")
-            vertices, edges, labels, confidence, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
+            vertices, edges, labels, confidences, output, root_mesh, is_proofread, num_initial_vertices, dist_to_error = get_root_output(model, device, data, root)
+            # print(len(vertices))
+            # print(len(labels))
+            # print("labels", labels)
+            # print("confidences", confidences)
             print("is_proofread", is_proofread)
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_ckpt{epoch}_{config['loader']['fov']}.html'
-            visualize(vertices, edges, labels, confidence, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], path)
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/new_visuals_with_segclr/{root}_{run_id}_{epoch}_{config['loader']['fov']}.html'
+            visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], path)
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
             # visualize_segclr(vertices, edges, path)
         # except Exception as e:

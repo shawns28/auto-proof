@@ -61,17 +61,14 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
         g.add_edges_from(skel_edges)
         # print("nodes order nx", g.nodes())
         # g = gt.Graph(skel_edges, directed=False)
+        skel_len = len(skel_vertices)
+        rank = create_rank(g, rep_index, skel_len, box_cutoff)
+        mask = np.where(rank < cutoff)[0]
+        rank = rank[mask]
+        new_skel_vertices = skel_vertices[mask]
+        new_skel_radii = skel_radii[mask]
     except Exception as e:
         return False, e, None
-
-    skel_len = len(skel_vertices)
-    rank = create_rank(g, rep_index, skel_len, box_cutoff)
-    mask = rank < cutoff
-    mask = np.where(mask == True)[0]
-
-    rank = rank[mask]
-    new_skel_vertices = skel_vertices[mask]
-    new_skel_radii = skel_radii[mask]
 
     new_edges = prune_edges(mask, skel_edges)
     

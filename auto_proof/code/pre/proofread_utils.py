@@ -3,7 +3,7 @@ from auto_proof.code.pre import data_utils
 import pandas as pd
 import numpy as np
 
-def convert_proofread_csv_to_txt(proofread_csv, proofread_root_path):
+def convert_proofread_csv_to_txt(mat_version, proofread_csv):
     """Converts proofread csv to txt.
     
     Args:
@@ -13,11 +13,12 @@ def convert_proofread_csv_to_txt(proofread_csv, proofread_root_path):
         roots converted
     """
     df = pd.read_csv(proofread_csv)
-    filtered_df = df[df['status_axon'] != 'non']
+    if mat_version <= 943:
+        filtered_df = df[df['status_axon'] != 'non']
+    else:
+        filtered_df = df[df['status_axon'] == 't']
     root_ids = filtered_df['root_id']
     root_ids = [str(root) for root in root_ids]
-    root_ids_array = np.array(root_ids)
-    data_utils.save_txt(proofread_root_path, root_ids_array)
     return root_ids
 
 def combine_proofread_roots(mat_dict):

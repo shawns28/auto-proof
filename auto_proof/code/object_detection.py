@@ -66,13 +66,14 @@ class ObjectDetectionDataset(Dataset):
                     confidences = confidences[indices]
                     edges = prune_edges(edges, indices)
                     box_cutoff_nodes = box_cutoff_nodes[indices]
-
+                labels = labels.astype(bool)
+                confidences = confidences.astype(bool)
                 assert(len(labels) == len(output))
 
                 # Might need to change this, not sure
                 threshold_to_output = {}
                 for threshold in self.thresholds:
-                    threshold_to_output[threshold] = np.where(output < threshold, False, True)
+                    threshold_to_output[threshold] = np.where(output > threshold, True, False)
 
                 g = nx.Graph()
                 g.add_edges_from(edges)
@@ -114,7 +115,7 @@ def remove_isolated_errors(graph, label_ccs, confidences):
                 break
         if is_isolated:
             for node in cc:
-                confidences[node] = True
+                confidences[node] = False
         else:
             new_label_ccs.append(cc)
     return new_label_ccs, confidences
@@ -225,12 +226,13 @@ def get_precision_and_recall(tp, fn, fp):
 if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
     run_id = 'AUT-255'
+    run_id = 'AUT-275' # first segclr
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 30
+    epoch = 5
     ckpt_path = f'{run_dir}model_{epoch}.pt'
-    # with open(f'{run_dir}config.json', 'r') as f:
-    #     config = json.load(f)
-    config = data_utils.get_config('base')
+    with open(f'{run_dir}config.json', 'r') as f:
+        config = json.load(f)
+    # config = data_utils.get_config('base')
     
     model = create_model(config)
 
@@ -248,13 +250,13 @@ if __name__ == "__main__":
     # roots = ['864691135463333789_000']
     # roots = ['864691135439772402_000']
 
-    mode = 'val'
+    mode = 'train'
     data = AutoProofDataset(config, mode)
-    config['loader']['batch_size'] = 32
-    config['loader']['num_workers'] = 32
-    config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
-    config['trainer']['obj_det_error_cloud_ratio'] = 0.2
-    config['data']['box_cutoff'] = 100
+    # config['loader']['batch_size'] = 32
+    config['loader']['num_workers'] = 64
+    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
+    # config['trainer']['obj_det_error_cloud_ratio'] = 0.2
+    # config['data']['box_cutoff'] = 100
     data_loader = build_dataloader(config, data, mode)
 
     model.eval()
@@ -268,7 +270,8 @@ if __name__ == "__main__":
         #     output = output.detach().cpu().numpy().squeeze(-1)
         #     root_to_output[root] = output
 
-        obj_det_val_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"))
+        # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
+        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
 
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
@@ -291,7 +294,7 @@ if __name__ == "__main__":
                 output = output.detach().cpu().numpy()
                 # roots = roots.detach().cpu().numpy().astype(int)
                 for i in range(len(roots)):
-                    if roots[i] in obj_det_val_roots:
+                    if roots[i] in obj_det_roots:
                         root_to_output[roots[i]] = output[i][mask[i]]
                 pbar.update()
         

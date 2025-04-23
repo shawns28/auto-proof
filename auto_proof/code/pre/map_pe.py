@@ -266,24 +266,3 @@ def orthogonalize(U):
     """
     Q, R = torch.linalg.qr(U)
     return Q
-
-def save_map_pe_roots(map_pes_dir, post_map_pes_roots_file):
-    files = glob.glob(f'{map_pes_dir}*')
-    roots = [files[i][-27:-5] for i in range(len(files))]
-    print(roots[0])
-    data_utils.save_txt(post_map_pes_roots_file, roots)
-
-if __name__ == "__main__":
-    config = data_utils.get_config()
-    config['data']['root_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/proofread_roots_in_train_roots_369502_913_conv.txt"
-    map_pes_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/map_pes/"
-    # freq = 'high'
-    config['data']['features_dir'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/features/"
-    print("creating map pes")
-    create_map_pe(config, map_pes_dir)
-
-    post_map_pes_roots_file = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/post_map_pe_roots.txt"
-    save_map_pe_roots(map_pes_dir, post_map_pes_roots_file)
-
-    diff_path = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/debugging_data/missing_map_pe_roots.txt'
-    data_utils.compare_roots(config['data']['root_path'], post_map_pes_roots_file, diff_path)

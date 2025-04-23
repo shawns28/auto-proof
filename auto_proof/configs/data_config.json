@@ -14,7 +14,7 @@
         "proofread_dir": "proofread/",
         "post_proofread_roots": "post_proofread_roots.txt",
         "csv_943": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943.csv",
-        "csv_143": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300.csv",
+        "csv_1300": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/proofread_roots_1300.csv",
         "mat_versions": [943, 1300],
         "copy_count": 20
     },
@@ -52,7 +52,10 @@
         "roots_at_segclr_dir": "roots_at_segclr/",
         "segclr_dir": "segclr/",
         "post_segclr_roots": "post_segclr_roots.txt",
-        "mat_versions": [343, 943, 1300]
+        "mat_versions": [343, 943, 1300],
+        "small_radius": 1000,
+        "large_radius": 5000,
+        "visualize_radius": false
     },
     "split": {
         "split": [0.8, 0.1, 0.1],

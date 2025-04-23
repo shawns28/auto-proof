@@ -3,8 +3,9 @@
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/",
         "features_dir": "features/",
         "labels_dir": "labels_at_1300/",
+        "segclr_dir": "segclr/",
         "proofread_dir": "proofread/",
-        "split_dir": "split_379668/",
+        "split_dir": "split_503534/",
         "all_roots": "all_roots.txt",
         "train_roots": "train_roots.txt",
         "val_roots": "val_roots.txt",
@@ -20,7 +21,7 @@
         "prefetch_factor": 0,
         "batch_size": 32,
         "fov": 250,
-        "feat_dim": 36
+        "feat_dim": 101
     },
     "model": {
         "num_classes": 1,
