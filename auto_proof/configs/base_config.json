@@ -10,10 +10,10 @@
         "train_roots": "train_roots.txt",
         "val_roots": "val_roots.txt",
         "test_roots": "test_roots.txt",
-        "proofread_roots": "943_1300.txt",
+        "proofread_roots": "943_unique.txt",
         "obj_det_val_roots":  "val_conf_no_error_in_box_roots.txt",
         "mat_version_start": 343,
-        "mat_version_end": 1300,
+        "mat_version_end": 943,
         "box_cutoff": 100
     },
     "loader": {
