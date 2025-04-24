@@ -88,6 +88,9 @@ def process_root_features(data):
         return
     
     status, e, feature_dict = process_skel(data_config['features']['box_cutoff'], data_config['features']['cutoff'], is_proofread, rep, skel_dict)
+    if len(feature_dict['vertices'] == 1):
+        print("Root had one vertice, skipping", root)
+        return
     if status == False:
         print("Failed to process for root", root, "eror:", e)
         return

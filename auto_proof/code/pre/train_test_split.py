@@ -33,16 +33,19 @@ def main():
     features_dir = f'{data_dir}{data_config['features']['features_dir']}'
     labels_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{data_config['labels']['latest_mat_version']}/'
 
-    post_label_roots = data_utils.load_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}')
-    print("post_label_roots len", len(post_label_roots))
+    # post_label_roots = data_utils.load_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}')
+    # print("post_label_roots len", len(post_label_roots))
     
-    post_segclr_roots = data_utils.load_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}')
-    print("post_segclr_roots len", len(post_segclr_roots))
-    roots = np.intersect1d(post_label_roots, post_segclr_roots)
-    print("roots combined len", len(roots))
-    roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
-    roots = np.setdiff1d(roots, roots_1300_unique_copied)
-    print("final roots len", len(roots))
+    # post_segclr_roots = data_utils.load_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}')
+    # print("post_segclr_roots len", len(post_segclr_roots))
+    # roots = np.intersect1d(post_label_roots, post_segclr_roots)
+    # print("roots combined len", len(roots))
+    # roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
+    # roots = np.setdiff1d(roots, roots_1300_unique_copied)
+    # print("final roots len", len(roots))
+
+    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/new_and_prev_shared_roots.txt")
+
     split = data_config['split']['split']
     split_dir = f'{roots_dir}{data_config['split']['split_dir']}{len(roots)}/'
     split_dicts_dir = f'{split_dir}dicts/'
@@ -103,10 +106,12 @@ def main():
         print("Loading cc_root_group_list")
         cc_root_group_list = data_utils.load_pickle_dict(cc_root_group_list_path)
 
-    proofread_mat_version1 = data_config['proofread']['mat_versions'][0]
-    proofread_mat_version2 = data_config['proofread']['mat_versions'][1]
-    proofread_roots = data_utils.load_txt(f'{data_dir}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}_copied.txt')
-    
+    # proofread_mat_version1 = data_config['proofread']['mat_versions'][0]
+    # proofread_mat_version2 = data_config['proofread']['mat_versions'][1]
+    # proofread_roots = data_utils.load_txt(f'{data_dir}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}_copied.txt')
+    proofread_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
+    proofread_roots = [str(root) + '_000' for root in proofread_roots]
+
     val_roots_path = f'{split_dir}val_roots.txt'
     train_roots_path = f'{split_dir}train_roots.txt'
     if not (os.path.exists(val_roots_path) and os.path.exists(train_roots_path)):

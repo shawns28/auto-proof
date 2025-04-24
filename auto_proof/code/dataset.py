@@ -25,9 +25,10 @@ class AutoProofDataset(Dataset):
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
         self.segclr_dir = f'{self.data_dir}{config['data']['segclr_dir']}'
         self.proofread_roots = data_utils.load_txt(f'{self.data_dir}{config['data']['proofread_dir']}{config['data']['proofread_roots']}')
-       
+
         self.fov = config['loader']['fov']
         self.box_cutoff = config['data']['box_cutoff']
+        self.use_segclr = config['loader']['use_segclr']
 
     def __len__(self):
         return len(self.roots)
@@ -56,7 +57,7 @@ class AutoProofDataset(Dataset):
         labels_path = f'{self.labels_dir}{root}.hdf5'
         segclr_path = f'{self.segclr_dir}{root}.hdf5'
         try:
-            with h5py.File(feature_path, 'r') as feat_f,  h5py.File(labels_path, 'r') as labels_f, h5py.File(segclr_path, 'r') as segclr_f:
+            with h5py.File(feature_path, 'r') as feat_f,  h5py.File(labels_path, 'r') as labels_f:
                 vertices = torch.from_numpy(feat_f['vertices'][:])
                 pos_enc = torch.from_numpy(feat_f['map_pe'][:])
 
@@ -68,13 +69,15 @@ class AutoProofDataset(Dataset):
                 labels = torch.from_numpy(labels_f['labels'][:]).int().unsqueeze(1)
                 confidences = torch.from_numpy(labels_f['confidences'][:]).int().unsqueeze(1)
 
-                segclr = torch.from_numpy(segclr_f['segclr'][:])
-                has_emb = torch.from_numpy(segclr_f['has_emb'][:]).unsqueeze(1)
-
+                if self.use_segclr:
+                    with h5py.File(segclr_path, 'r') as segclr_f:
+                        segclr = torch.from_numpy(segclr_f['segclr'][:])
+                        has_emb = torch.from_numpy(segclr_f['has_emb'][:]).unsqueeze(1)
+                        input = torch.cat((vertices, radius, pos_enc, segclr, has_emb), dim=1)
+                else:
+                    input = torch.cat((vertices, radius, pos_enc), dim=1)
+                
                 size = len(vertices)
-
-                input = torch.cat((vertices, radius, pos_enc, segclr, has_emb), dim=1)
-
                 if size > self.fov:
                     indices = torch.where(rank < self.fov)[0]
                     input = input[indices]

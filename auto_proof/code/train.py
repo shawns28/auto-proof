@@ -285,10 +285,10 @@ class Trainer(object):
         dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
 
         visualize_tuples = [
-            ('864691135463333789_000', True, 'train'), 
-            ('864691136379030485_000', True, 'val'), 
-            ('864691136443843459_000', True, 'test'), 
-            ('864691134918370314_000', True, 'test')]
+            ('864691135657412579_000', True, 'val'), 
+            ('864691135682085268_000', True, 'val'), 
+            ('864691135884404592_000', True, 'val'), 
+            ('864691135187356435_000', True, 'val')]
         
         for _ in range(self.visualize_rand_num):
             mode, dataset = random.choice(list(dataset_dict.items()))

@@ -48,12 +48,25 @@ def main():
     # roots = ['864691134940888163_000'] # The index 3154 is out of bounds for axis 0 with size 3154
     # roots = ['864691134989083258_000'] # Same as above
     # roots = ['864691135133124000_000'] # eror: Bbox([np.int32(123921), np.int32(58980), np.int32(22466)],[np.int32(124049), np.int32(59108), np.int32(22498)], dtype=np.int32, unit='vx')
-    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
-    print("roots original", len(roots))
+    
+    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
+    roots = [str(root) + '_000' for root in roots]
+    print(len(roots))
+    
+    # TODO: Uncomment
+    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    # print("roots original", len(roots))
 
-    roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
-    roots = np.setdiff1d(roots, roots_1300_unique_copied)
-    print("roots after removing 1300", len(roots))
+    # # TODO: Remove after 1300 gets segclr
+    # roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
+    # roots = np.setdiff1d(roots, roots_1300_unique_copied)
+    # print("roots after removing 1300", len(roots))
+
+    # # TODO: Remove when actaully running the script since it can create edge cases
+    # already_processed = glob.glob(f'{segclr_dir}*')
+    # already_processed = [already_processed[i][-27:-5] for i in range(len(already_processed))]
+    # roots = np.intersect1d(roots, already_processed)
+    # print("roots after removing already existing", len(roots))
 
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
     print("chunk len", len(roots))

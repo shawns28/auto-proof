@@ -23,6 +23,11 @@ def main():
     fov = config['loader']['fov']
     gpu = str(torch.cuda.get_device_name(0))
 
+    if config['loader']['use_segclr']:
+        config['loader']['feat_dim'] = 101
+    else:
+        config['loader']['feat_dim'] = 36
+
     # Create a Neptune run
     run = neptune.init_run(
         project="shawns28/AutoProof", 

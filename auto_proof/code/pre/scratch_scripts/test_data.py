@@ -18,56 +18,82 @@ def test():
     labels_at_latest_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{latest_version}/'
     roots_at_latest_dir = f'{data_dir}{data_config['labels']['roots_at_latest_dir']}{latest_version}/'
 
-    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
     # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/all_roots.txt")
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt")
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt")
+    # roots = ['864691135424062237_000']
     proofread_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300_copied.txt")
 
-    no_error_roots = []
+    one_len_roots = []
+    
     # args_list = list([(root, features_dir, map_pe_dir, seed_index, fov, max_cloud) for root in roots])
     args_list = list([(root, data_config) for root in roots])
     num_processes = 64
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
-        for no_error_root in pool.imap_unordered(process_root, args_list):
-            if no_error_root != '':
-                no_error_roots.append(no_error_root)
+        for one_len in pool.imap_unordered(process_root, args_list):
+            if one_len != '':
+                one_len_roots.append(one_len)
             pbar.update()
-            
-    print("total counts", len(roots))
 
-    result = np.setdiff1d(no_error_roots, proofread_roots)
+    print("one len roots", one_len_roots)
+    data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/one_len_roots.txt", one_len_roots)
 
-    print("total", len(result))
-    print("total - proofread roots len", len(result) - len(proofread_roots))
+    # print("total counts", len(roots))
+
+    # result = np.setdiff1d(no_error_roots, proofread_roots)
+
+    # print("total", len(result))
+    # print("total - proofread roots len", len(result) - len(proofread_roots))
 
 
 def process_root(args):
     root, data_config = args
 
     feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
-    latest_version = data_config['labels']['latest_mat_version']
-    labels_at_latest_path = f'{data_config['data_dir']}{data_config['labels']['labels_at_latest_dir']}{latest_version}/{root}.hdf5'
-
+    # latest_version = data_config['labels']['latest_mat_version']
+    # labels_path = f'{data_config['data_dir']}{data_config['labels']['labels_at_latest_dir']}{latest_version}/{root}.hdf5'
+    # segclr_path = f'{data_config['data_dir']}{data_config['segclr']['segclr_dir']}{root}.hdf5'
+    # og_feature_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/features_conf/{root}.hdf5"
     try:
-        
-        with h5py.File(labels_at_latest_path, 'r') as labels_f, h5py.File(feature_path, 'r') as feat_f:
-            # vertices = torch.from_numpy(f['vertices'][:])
-            # radius = torch.from_numpy(f['radius'][:]).unsqueeze(1)
-            labels = labels_f['labels'][:]
-            # labels = labels.unsqueeze(1).int()
-            # confidence = confidence.unsqueeze(1).int()
-            size = len(labels)
-            box_cutoff = 100
-            rank = feat_f['rank'][:]
+        with  h5py.File(feature_path, 'r') as feat_f:
+        # with h5py.File(og_feature_path, 'r') as og_feat_f, h5py.File(feature_path, 'r') as feat_f,  h5py.File(labels_path, 'r') as labels_f, h5py.File(segclr_path, 'r') as segclr_f:
+            # og_v = og_feat_f['vertices'][:]
+            # og_e = og_feat_f['edges'][:]
+            # print("og v", og_v)
+            # print("og e", og_e)
+            vertices = feat_f['vertices'][:]
+            # radius = feat_f['radius'][:]
+            # labels = labels_f['labels'][:]
+            # confidences = labels_f['confidences'][:]
+            # pos_enc = feat_f['map_pe'][:]
 
-            if size > box_cutoff:
-                indices = np.where(rank < box_cutoff)[0]
-                labels = labels[indices]
+            # rank = feat_f[f'rank'][:]
 
-            if np.any(labels > 0):
-                return ''
-            else:
+            # edges = feat_f['edges'][:]
+
+            # dist_to_error = labels_f['dist'][:]
+                
+
+            # segclr = segclr_f['segclr'][:]
+            # has_emb = segclr_f['has_emb'][:]
+            # # labels = labels.unsqueeze(1).int()
+            # # confidence = confidence.unsqueeze(1).int()
+            # size = len(labels)
+            # box_cutoff = 100
+            # rank = feat_f['rank'][:]
+            # print(vertices, radius, labels,confidences, pos_enc, rank, edges, dist_to_error, segclr, has_emb)
+            # if size > box_cutoff:
+            #     indices = np.where(rank < box_cutoff)[0]
+            #     labels = labels[indices]
+
+            # if np.any(labels > 0):
+            #     return ''
+            # else:
+            #     return root
+            if len(vertices) == 1:
                 return root
+            else:
+                return ''
 
             # if size > fov:
             #     indices = torch.where(rank < fov)[0]

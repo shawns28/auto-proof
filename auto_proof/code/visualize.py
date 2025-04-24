@@ -199,7 +199,7 @@ if __name__ == "__main__":
     # run_id = 'AUT-255'
     run_id = 'AUT-272'
     run_id = 'AUT-275' # First segclr
-    epoch = 5
+    epoch = 20
     run_dir = f'{ckpt_dir}{run_id}/'
     # TODO: Uncomment below after segclr testing
     with open(f'{run_dir}config.json', 'r') as f:
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     # with open('/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/base_config.json', 'r') as f:
     #     config = json.load(f)
 
-    data = AutoProofDataset(config, 'all')
+    data = AutoProofDataset(config, 'val')
     # config['model']['depth'] = 3
     # config['model']['n_head'] = 4
     model = create_model(config)
@@ -258,8 +258,10 @@ if __name__ == "__main__":
     # roots = ['864691136227494225_000', '864691136227495761_000', '864691136912265969_000', '864691136926085706_000', '864691135777645664_000', '864691136619433869_002']
     # roots = ['864691135361128519_000', '864691135374663666_000', '864691135387215745_000', '864691135395011829_000', '864691135441162824_000', '864691135447598932_000', '864691135463303486_000', '864691135476697512_000']
     # roots = ['864691134940888163_000']
-    roots = ['864691136437067166_000', '864691136662768094_000', '864691136578169108_000', '864691136990572949_000', '864691136974211868_000', '864691134989119098_000', '864691135082409975_000']
-    roots = ['864691135324927034_000', '864691135327500274_000', '864691135328621376_000', '864691135335739881_000', '864691135335745769_000']
+    # roots = ['864691136437067166_000', '864691136662768094_000', '864691136578169108_000', '864691136990572949_000', '864691136974211868_000', '864691134989119098_000', '864691135082409975_000']
+    # roots = ['864691135324927034_000', '864691135327500274_000', '864691135328621376_000', '864691135335739881_000', '864691135335745769_000']
+    # roots = ['864691134723510360_000', '864691134917390602_000', '864691135118894813_000', '864691135122469671_000', '864691135125642257_000', '864691135187356435_000', '864691135361185863_000', '864691135572385061_000', '864691135635398115_000', '864691135657412579_000', '864691135682085268_000', '864691135884404592_000']
+    roots = ['864691135657412579_000']
     # for i in range(10):
     for root in roots:
         # try:
@@ -276,7 +278,7 @@ if __name__ == "__main__":
             # print("labels", labels)
             # print("confidences", confidences)
             print("is_proofread", is_proofread)
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/new_visuals_with_segclr/{root}_{run_id}_{epoch}_{config['loader']['fov']}.html'
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/shared_visual_debug/{root}_test.html'
             visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], path)
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
             # visualize_segclr(vertices, edges, path)

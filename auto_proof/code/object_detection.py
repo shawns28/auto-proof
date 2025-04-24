@@ -228,7 +228,7 @@ if __name__ == "__main__":
     run_id = 'AUT-255'
     run_id = 'AUT-275' # first segclr
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 5
+    epoch = 20
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
@@ -250,11 +250,15 @@ if __name__ == "__main__":
     # roots = ['864691135463333789_000']
     # roots = ['864691135439772402_000']
 
-    mode = 'train'
+    mode = 'all'
     data = AutoProofDataset(config, mode)
     # config['loader']['batch_size'] = 32
-    config['loader']['num_workers'] = 64
+    config['loader']['num_workers'] = 32
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
+    config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/shared_conf_no_error_in_box_roots.txt"
+    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/sharedval_conf_no_error_in_box_roots.txt"
+    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"
+    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"
     # config['trainer']['obj_det_error_cloud_ratio'] = 0.2
     # config['data']['box_cutoff'] = 100
     data_loader = build_dataloader(config, data, mode)
@@ -271,7 +275,8 @@ if __name__ == "__main__":
         #     root_to_output[root] = output
 
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
-        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
+        # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
+        obj_det_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
 
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
@@ -316,7 +321,7 @@ if __name__ == "__main__":
         print("metrics at threshold 0.99", obj_det_data.__getmetrics__()[0.99])
 
         # save_dir = run_dir
-        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/obj_test/'
+        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/share_debugging/'
 
         save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, config['trainer']['obj_det_error_cloud_ratio'], config['data']['box_cutoff'])
     print("done")    

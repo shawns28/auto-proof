@@ -1,6 +1,4 @@
 from auto_proof.code.pre import data_utils
-from auto_proof.code.pre.skeletonize import get_skel, process_skel
-from auto_proof.code.pre.map_pe import map_pe_wrapper
 
 import os
 import numpy as np
@@ -10,20 +8,54 @@ import multiprocessing
 import glob
 import time
 
-files = glob.glob(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr/"}*')
-roots = [files[i][-27:-5] for i in range(len(files))]
-data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_segclr_roots.txt", roots)
+# files = glob.glob(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr/"}*')
+# roots = [files[i][-27:-5] for i in range(len(files))]
+# data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_segclr_roots.txt", roots)
 
 # current_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/all_roots_461023.txt")
-# proofread_943_changed = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300_changed.txt")
+# # proofread_943_changed = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300_changed.txt")
 
-# result = np.setdiff1d(current_roots, proofread_943_changed)
-# print(len(current_roots))
-# print(len(proofread_943_changed))
-# print(len(result))
+# # result = np.setdiff1d(current_roots, proofread_943_changed)
+# # print(len(current_roots))
+# # print(len(proofread_943_changed))
+# result = current_roots
 
-# proofread = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_1300.txt")
-# result = np.setdiff1d(result, proofread)
+# result = [str(root) + '_000' for root in result]
+
+# data_config = data_utils.get_config('data')
+# # client_config = data_utils.get_config('client')
+
+# data_dir = data_config['data_dir']
+# mat_version_start = 343
+# mat_version_end = 1300
+
+# roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
+# features_dir = f'{data_dir}{data_config['features']['features_dir']}'
+# labels_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{data_config['labels']['latest_mat_version']}/'
+
+# post_label_roots = data_utils.load_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}')
+# print("post_label_roots len", len(post_label_roots))
+
+# post_segclr_roots = data_utils.load_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}')
+# print("post_segclr_roots len", len(post_segclr_roots))
+# roots = np.intersect1d(post_label_roots, post_segclr_roots)
+# print("roots combined len", len(roots))
+# roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
+# roots = np.setdiff1d(roots, roots_1300_unique_copied)
+# print("final roots len", len(roots))
+
+# result2 = np.intersect1d(result, roots)
+# print("final result2", len(result2))
+# data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/new_and_prev_shared_roots.txt", result2)
+
+print("hi")
+
+# files = glob.glob(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr/"}*')
+# roots = [files[i][-27:-5] for i in range(len(files))]
+# proofread = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
+# proofread = [str(root) + '_000' for root in proofread]
+# print(len(proofread))
+# result = np.intersect1d(roots, proofread)
 # print(len(result))
 
 # result = [str(root) + '_000' for root in result]
