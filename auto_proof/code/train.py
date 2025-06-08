@@ -16,6 +16,7 @@ import random
 import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve
 import json
+from prodigyopt import Prodigy
 
 
 class Trainer(object):
@@ -53,12 +54,13 @@ class Trainer(object):
         self.save_ckpt_every = config['trainer']['save_ckpt_every']
         self.save_visual_every = config['trainer']['save_visual_every']
         self.show_tol = config['trainer']['show_tol']
-        self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
+        self.obj_det_error_cloud_ratios = config['trainer']['obj_det_error_cloud_ratios']
         self.max_dist = config['trainer']['max_dist']
         self.visualize_rand_num = config['trainer']['visualize_rand_num']
         self.visualize_cutoff = config['trainer']['visualize_cutoff']
         self.tresholds = self.config['trainer']['thresholds']
         self.recall_targets = self.config['trainer']['recall_targets']
+        self.branch_degrees = self.config['trainer']['branch_degrees']
 
         # Loss weights
         self.class_weights = torch.tensor(config['trainer']['class_weights']).float().to(self.device)
@@ -75,7 +77,13 @@ class Trainer(object):
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
         # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
         self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
-
+        # safeguard_warmup=True
+        # weight_decay = 0.01 # adam default
+        # decouple = False # adam default
+        # d_coef = 0.5
+        # # self.optimizer = Prodigy(list(self.model.parameters()), lr=1.0, weight_decay=weight_decay, decouple=decouple, d_coef=d_coef, safeguard_warmup=safeguard_warmup)
+        # self.optimizer = Prodigy(list(self.model.parameters()), lr=1.0, d_coef=d_coef, safeguard_warmup=safeguard_warmup)
+        # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.epochs)
     def train(self):     
         best_vloss = 1_000_000
         print('Initial Epoch {}/{} | LR {:.4f}'.format(self.epoch, self.epochs, self.optimizer.state_dict()['param_groups'][0]['lr']))
@@ -132,7 +140,7 @@ class Trainer(object):
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
-                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data) - 1)]
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight, rank, self.box_cutoff, self.box_weight)
@@ -171,7 +179,7 @@ class Trainer(object):
             for i, data in enumerate(self.val_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots = data[0]
-                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data))]
+                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data) - 1)]
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 output = self.model(input, adj) # (b, fov, 1)
                 loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
@@ -224,8 +232,9 @@ class Trainer(object):
             
             metrics_dict = obj_det_data.__getmetrics__()
 
-            obj_save_path = obj_det_plot(metrics_dict, self.tresholds, self.epoch, self.save_dir, self.obj_det_error_cloud_ratio, self.box_cutoff)
-            self.run[f"plots/obj_precision_recall_curve"].append(neptune.types.File(obj_save_path))
+            for cloud_ratio in self.obj_det_error_cloud_ratios:
+                obj_save_path = obj_det_plot(metrics_dict, self.tresholds, self.epoch, self.save_dir, cloud_ratio, self.box_cutoff, self.branch_degrees)
+                self.run[f"plots/obj_precision_recall_curve_{cloud_ratio}"].append(neptune.types.File(obj_save_path))
 
         # Taking out the initial 0 from initialization
         # NOTE: Theses plots are no longer useful really
@@ -306,7 +315,7 @@ class Trainer(object):
     def visualize_root(self, root, is_constant, mode, dataset_dict):
         try:
             dataset = dataset_dict[mode]
-            vertices, edges, labels, confidences, output, root_mesh, is_proofread, _ , dist_to_error = get_root_output(self.model, self.device, dataset, root)
+            vertices, edges, labels, confidences, output, root_mesh, is_proofread, _, dist_to_error, _, _, _, rank, _ = get_root_output(self.model, self.device, dataset, root)
             random = 'random'
             if is_constant:
                 random = 'constant'
@@ -314,7 +323,7 @@ class Trainer(object):
             if is_proofread:
                 edit = 'proofread'
             save_path = f'{self.save_dir}{self.epoch}_{random}_{mode}_{edit}_{root}.html'
-            visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, self.max_dist, self.show_tol, save_path)
+            visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, self.max_dist, self.show_tol, rank, self.box_cutoff, save_path)
             self.run[f"visuals/{self.epoch}/{random}_{mode}_{edit}_{root}"].upload(save_path)
         except Exception as e:
             print("Failed visualization for root id: ", root, "error: ", e)

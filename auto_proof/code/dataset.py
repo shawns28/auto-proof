@@ -21,6 +21,9 @@ class AutoProofDataset(Dataset):
         self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
         self.split_dir = f'{self.roots_dir}{config['data']['split_dir']}'
         self.roots = data_utils.load_txt(f'{self.split_dir}{config['data'][f'{mode}_roots']}')
+        # num_elements = int(0.1 * len(self.roots))
+        # random_indices = np.random.choice(len(self.roots), size=num_elements, replace=False)
+        # self.roots = self.roots[random_indices]
         self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}'
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
         self.segclr_dir = f'{self.data_dir}{config['data']['segclr_dir']}'
@@ -29,6 +32,18 @@ class AutoProofDataset(Dataset):
         self.fov = config['loader']['fov']
         self.box_cutoff = config['data']['box_cutoff']
         self.use_segclr = config['loader']['use_segclr']
+        self.relative_vertices = config['loader']['relative_vertices']
+        self.zscore_radius = config['loader']['zscore_radius']
+        self.zscore_segclr = config['loader']['zscore_segclr']
+        self.l2_norm_segclr = config['loader']['l2_norm_segclr']
+        self.zscore_pe = config['loader']['zscore_pe']
+
+        self.radius_mean = torch.from_numpy(np.load(f'{self.split_dir}radius_mean.npy'))
+        self.radius_std = torch.from_numpy(np.load(f'{self.split_dir}radius_std.npy'))
+        self.pos_mean = torch.from_numpy(np.load(f'{self.split_dir}pos_mean.npy'))
+        self.pos_std = torch.from_numpy(np.load(f'{self.split_dir}pos_std.npy'))
+        self.segclr_mean = torch.from_numpy(np.load(f'{self.split_dir}segclr_mean.npy'))
+        self.segclr_std = torch.from_numpy(np.load(f'{self.split_dir}segclr_std.npy'))
 
     def __len__(self):
         return len(self.roots)
@@ -59,6 +74,7 @@ class AutoProofDataset(Dataset):
         try:
             with h5py.File(feature_path, 'r') as feat_f,  h5py.File(labels_path, 'r') as labels_f:
                 vertices = torch.from_numpy(feat_f['vertices'][:])
+                
                 pos_enc = torch.from_numpy(feat_f['map_pe'][:])
 
                 rank = torch.from_numpy(feat_f[f'rank'][:]).unsqueeze(1)
@@ -69,9 +85,25 @@ class AutoProofDataset(Dataset):
                 labels = torch.from_numpy(labels_f['labels'][:]).int().unsqueeze(1)
                 confidences = torch.from_numpy(labels_f['confidences'][:]).int().unsqueeze(1)
 
+                mean_vertices = torch.zeros(3)
+                if self.relative_vertices:
+                    mean_vertices = torch.mean(vertices, dim=0, keepdim=True) # normalize vertices
+                    vertices = vertices - mean_vertices
+
+                if self.zscore_radius:
+                    radius = (radius - self.radius_mean) / self.radius_std
+
+                if self.zscore_pe:
+                    pos_enc = (pos_enc - self.pos_mean) / self.pos_std
+
                 if self.use_segclr:
                     with h5py.File(segclr_path, 'r') as segclr_f:
-                        segclr = torch.from_numpy(segclr_f['segclr'][:])
+                        segclr = torch.from_numpy(segclr_f['segclr'][:]).float()
+                        if self.l2_norm_segclr:
+                            segclr = torch.nn.functional.normalize(segclr, p=2, dim=1)
+
+                        if self.zscore_segclr:
+                            segclr = (segclr - self.segclr_mean) / self.segclr_std
                         has_emb = torch.from_numpy(segclr_f['has_emb'][:]).unsqueeze(1)
                         input = torch.cat((vertices, radius, pos_enc, segclr, has_emb), dim=1)
                 else:
@@ -98,7 +130,7 @@ class AutoProofDataset(Dataset):
             print("root: ", root, "error: ", e)
             return None
             
-        return root, input, labels, confidences, dist_to_error, rank, adj
+        return root, input, labels, confidences, dist_to_error, rank, adj, mean_vertices
 
 # def hash_shard(root, num_shards):
 #     hash_value = hash(root)
@@ -139,21 +171,19 @@ def adjency_to_edge_list_numpy_skip_diag(adj):
 # adapted from skeletonize.py
 def prune_edges(edges, indices):
     orig_to_new = {value.item(): index for index, value in enumerate(indices)}
-    edge_mask = np.zeros(len(edges), dtype=bool)
+    new_edges = []
     for i in range(len(edges)):
         edge = edges[i]
         if edge[0] in orig_to_new and edge[1] in orig_to_new:
-            edges[i][0] = orig_to_new[edge[0]]
-            edges[i][1] = orig_to_new[edge[1]]
-            edge_mask[i] = True
-    return edges[edge_mask]
+            new_edges.append([orig_to_new[edge[0]], orig_to_new[edge[1]]])
+    return np.array(new_edges)
 
 def build_dataloader(config, dataset, mode):
     num_workers = config['loader']['num_workers']
     batch_size = config['loader']['batch_size']
     shuffle = False
 
-    if mode == 'root' or mode == 'train':
+    if mode == 'all' or mode == 'train':
         shuffle = True
 
     prefetch_factor = config['loader']['prefetch_factor']

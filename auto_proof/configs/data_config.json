@@ -2,7 +2,7 @@
     "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/",
     "multiprocessing": {
         "num_chunks": 24,
-        "num_processes": 30
+        "num_processes": 32
     },
     "raw_edits": {
         "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/250321/minnie_splitlog_250321.feather",
@@ -33,6 +33,7 @@
         "latest_mat_version": 1300,
         "roots_at_latest_dir": "roots_at_",
         "labels_at_latest_dir": "labels_at_",
+        "ignore_edge_ccs": false,
         "post_label_roots": "post_label_roots.txt"
     },
     "segmentation": {

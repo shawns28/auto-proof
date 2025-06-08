@@ -20,93 +20,90 @@ from auto_proof.code.connectomics.sharding import md5_shard
 import gcsfs
 from scipy.spatial import cKDTree
 
-def get_segclr_emb(root, feature_path, root_at_arr, embedding_reader, emb_dim, visualize_radius, small_radius, large_radius):
+def get_segclr_emb(root, vertices, edges, root_at_arr, embedding_reader, emb_dim, visualize_radius, small_radius, large_radius):
     try: 
-        with h5py.File(feature_path, 'r') as feat_f:
-            vertices = feat_f['vertices'][:]
-            edges = feat_f['edges'][:]
-            # print("num vertice", vertices.shape)
-            g = nx.Graph()
-            g.add_nodes_from(range(len(vertices)))
-            g.add_edges_from(edges)
+        # print("num vertice", vertices.shape)
+        g = nx.Graph()
+        g.add_nodes_from(range(len(vertices)))
+        g.add_edges_from(edges)
 
-            roots_at_to_indices = create_root_at_dict(root_at_arr)
+        roots_at_to_indices = create_root_at_dict(root_at_arr)
 
-            # Create a map from root_943 to list of vertice indices
-            # This way we can process each root_943 at a time and get rid of embeddings after
+        # Create a map from root_943 to list of vertice indices
+        # This way we can process each root_943 at a time and get rid of embeddings after
 
-            original_root = root
-            result = np.zeros((len(vertices), emb_dim))
-            has_emb = np.ones(len(vertices))
-            if visualize_radius:
-                too_far_small_radius_indices = np.zeros(len(vertices), dtype=bool)
-                too_far_large_radius_indices = np.zeros(len(vertices), dtype=bool)
-            for root in roots_at_to_indices:
-                try:
-                    embs = embedding_reader[root]
-                except KeyError as e: # If is doesn't exist in segclr archive
-                    continue
-                except Exception as e:
-                    return False, e, None, None
-                # Convert to using the actual indices
-                emb_vals = []
-                coords = []
-                for coord_key, emb_val in embs.items():
-                    emb_vals.append(emb_val)
-                    coords.append(coord_key)
-                emb_vals = np.array(emb_vals)
-                coords = np.array(coords)
+        original_root = root
+        result = np.zeros((len(vertices), emb_dim))
+        has_emb = np.ones(len(vertices))
+        if visualize_radius:
+            too_far_small_radius_indices = np.zeros(len(vertices), dtype=bool)
+            too_far_large_radius_indices = np.zeros(len(vertices), dtype=bool)
+        for root in roots_at_to_indices:
+            try:
+                embs = embedding_reader[root]
+            except KeyError as e: # If is doesn't exist in segclr archive
+                continue
+            except Exception as e:
+                return False, e, None, None
+            # Convert to using the actual indices
+            emb_vals = []
+            coords = []
+            for coord_key, emb_val in embs.items():
+                emb_vals.append(emb_val)
+                coords.append(coord_key)
+            emb_vals = np.array(emb_vals)
+            coords = np.array(coords)
 
-                # print("emb vals shape", emb_vals.shape)
+            # print("emb vals shape", emb_vals.shape)
 
-                tree = cKDTree(coords)
+            tree = cKDTree(coords)
 
-                for index in roots_at_to_indices[root]:
+            for index in roots_at_to_indices[root]:
 
-                    vertice = vertices[index]
-                    # print("coords at index", vertices[index], index)
-                    # query with a max distance
-                    # dd, ii = tree.query(vertice, k=7)
-                    # print("dd", dd)
-                    # print("ii", ii)
-                    # for i in ii:
-                    #     print("closest vertices", coords[i])
+                vertice = vertices[index]
+                # print("coords at index", vertices[index], index)
+                # query with a max distance
+                # dd, ii = tree.query(vertice, k=7)
+                # print("dd", dd)
+                # print("ii", ii)
+                # for i in ii:
+                #     print("closest vertices", coords[i])
 
-                    q_indices = tree.query_ball_point(vertice, small_radius)
-                    if len(q_indices) == 0:
-                        too_far_for_large = True
-                        # print("Nothing within radius of:", small_radius)
-                        degree_of_vertex = g.degree(index)
-                        if degree_of_vertex > 4:
-                            q_dist, q_indices = tree.query(vertice, k=10, distance_upper_bound=large_radius)
-                            q_indices = q_indices[np.where(q_dist != float('inf'))]
-                            if not len(q_indices) == 0:
-                                result[index] = np.mean([emb_vals[q_ind][:emb_dim] for q_ind in q_indices], axis=0)
-                                too_far_for_large = False
-                        elif degree_of_vertex == 1:
-                            q_d, q_ind = tree.query(vertice, k=1, distance_upper_bound=large_radius)
-                            if not q_d == float('inf'):
-                                result[index] = emb_vals[q_ind][:emb_dim]
-                                too_far_for_large = False
-                        if visualize_radius:
-                            if too_far_for_large:
-                                too_far_large_radius_indices[index] = True
-                            else:
-                                too_far_small_radius_indices[index] = True
-                        # if its a soma then take average of everything around it so that model knows its a soma
-                        # if its not a soma then take the closest one
-                    else:
-                        result[index] = np.mean([emb_vals[q_ind][:emb_dim] for q_ind in q_indices], axis=0)            
-            all_zeros = np.all(result == 0, axis=1)
-            zero_indices = np.where(all_zeros)[0]
-            if len(zero_indices) > 0:
-                has_emb[zero_indices] = 0
-            # print("use", use)
-            # print("result shape", result.shape)
-            if visualize_radius:
-                path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{original_root}_{small_radius}_{large_radius}radius_segclr.html'
-                visualize_segclr(vertices, edges, coords, too_far_small_radius_indices, too_far_large_radius_indices, path)
-            return True, None, result, has_emb
+                q_indices = tree.query_ball_point(vertice, small_radius)
+                if len(q_indices) == 0:
+                    too_far_for_large = True
+                    # print("Nothing within radius of:", small_radius)
+                    degree_of_vertex = g.degree(index)
+                    if degree_of_vertex > 4:
+                        q_dist, q_indices = tree.query(vertice, k=10, distance_upper_bound=large_radius)
+                        q_indices = q_indices[np.where(q_dist != float('inf'))]
+                        if not len(q_indices) == 0:
+                            result[index] = np.mean([emb_vals[q_ind][:emb_dim] for q_ind in q_indices], axis=0)
+                            too_far_for_large = False
+                    elif degree_of_vertex == 1:
+                        q_d, q_ind = tree.query(vertice, k=1, distance_upper_bound=large_radius)
+                        if not q_d == float('inf'):
+                            result[index] = emb_vals[q_ind][:emb_dim]
+                            too_far_for_large = False
+                    if visualize_radius:
+                        if too_far_for_large:
+                            too_far_large_radius_indices[index] = True
+                        else:
+                            too_far_small_radius_indices[index] = True
+                    # if its a soma then take average of everything around it so that model knows its a soma
+                    # if its not a soma then take the closest one
+                else:
+                    result[index] = np.mean([emb_vals[q_ind][:emb_dim] for q_ind in q_indices], axis=0)            
+        all_zeros = np.all(result == 0, axis=1)
+        zero_indices = np.where(all_zeros)[0]
+        if len(zero_indices) > 0:
+            has_emb[zero_indices] = 0
+        # print("use", use)
+        # print("result shape", result.shape)
+        if visualize_radius:
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{original_root}_{small_radius}_{large_radius}radius_segclr.html'
+            visualize_segclr(vertices, edges, coords, too_far_small_radius_indices, too_far_large_radius_indices, path)
+        return True, None, result, has_emb
     except Exception as e:
         return False, e, None, None
 
@@ -121,3 +118,30 @@ def create_root_at_dict(roots_at):
 
 def sharder(segment_id: int, num_shards, bytewidth) -> int:
     return md5_shard(segment_id, num_shards=num_shards, bytewidth=bytewidth)
+
+def get_roots_at_seglcr_version(root, data_dir, mat_versions, is_whole_cell):
+    """TODO: Fil in and mention the mat versions needs to be 3
+    
+    """
+    mat_version1 = mat_versions[0]
+    mat_version2 = mat_versions[1]
+    mat_version3 = mat_versions[2]
+    roots1 = data_utils.load_txt(f'{data_dir}roots_{mat_version1}_{mat_version2}/post_edit_roots.txt')
+    roots2 = data_utils.load_txt(f'{data_dir}proofread/{mat_version2}_unique.txt')
+    roots3 = data_utils.load_txt(f'{data_dir}roots_{mat_version2}_{mat_version3}/post_edit_roots.txt')
+    roots4 = data_utils.load_txt(f'{data_dir}proofread/{mat_version3}_unique.txt')
+
+    root_without_ident = root[:-4]
+    if root_without_ident in roots1:
+        segmentation_version = mat_version1
+    elif root_without_ident in roots2 or root_without_ident in roots3:
+        segmentation_version = mat_version2
+    elif root_without_ident in roots4:
+        segmentation_version = mat_version3
+    else:
+        if is_whole_cell:
+            print("Root not in any of the root lists")
+            segmentation_version = mat_version1
+        else:
+            raise Exception("Root not in any of the root lists")
+    return segmentation_version

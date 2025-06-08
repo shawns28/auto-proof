@@ -8,6 +8,16 @@ import multiprocessing
 import glob
 import time
 
+# missed_one = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/missed_0.05thres_0.1cloud_valincluding.txt")
+found_two = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/found_0.05thres_0.1cloud_val.txt")
+missed_segclr = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/missed_nosegclr.txt")
+print(len(found_two))
+print(len(missed_segclr))
+intersect = np.intersect1d(found_two, missed_segclr)
+# intersect = np.setdiff1d(missed_one, missed_two)
+print(len(intersect))
+data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/intersect_nosegclr.txt", intersect)
+
 # files = glob.glob(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr/"}*')
 # roots = [files[i][-27:-5] for i in range(len(files))]
 # data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_segclr_roots.txt", roots)
@@ -48,7 +58,7 @@ import time
 # print("final result2", len(result2))
 # data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/new_and_prev_shared_roots.txt", result2)
 
-print("hi")
+# print("hi")
 
 # files = glob.glob(f'{"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr/"}*')
 # roots = [files[i][-27:-5] for i in range(len(files))]

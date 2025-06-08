@@ -66,10 +66,6 @@ def process_root_features(data):
        TODO: Fill in
     """
     root, data_config, rep, client, datastack_name = data
-    if rep is None:
-        is_proofread = True
-    else:
-        is_proofread = False
 
     feature_path = f'{data_config['data_dir']}{data_config['features']['features_dir']}{root}.hdf5'
     # Skip already processed roots
@@ -87,7 +83,7 @@ def process_root_features(data):
             pass
         return
     
-    status, e, feature_dict = process_skel(data_config['features']['box_cutoff'], data_config['features']['cutoff'], is_proofread, rep, skel_dict)
+    status, e, feature_dict = process_skel(data_config['features']['box_cutoff'], data_config['features']['cutoff'], rep, skel_dict)
     if len(feature_dict['vertices'] == 1):
         print("Root had one vertice, skipping", root)
         return

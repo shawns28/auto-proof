@@ -36,16 +36,22 @@ def main():
         tags=[f'{ram_alloc}gb', f'{fov}fov', gpu], 
         dependencies="infer",
         monitoring_namespace="monitoring",
-        source_files=["auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/code/object_detection.py", "auto_proof/configs/base_config.json"],
+        source_files=["auto_proof/configs/base_config.json", "auto_proof/code/model.py", "auto_proof/code/main/main.py", "auto_proof/code/dataset.py", "auto_proof/code/train.py", "auto_proof/code/visualize.py", "auto_proof/code/object_detection.py"],
     )
 
     recall_targets = config["trainer"]["recall_targets"]
     thresholds = config["trainer"]["thresholds"]
+    branch_degrees = config["trainer"]["branch_degrees"]
+    obj_det_error_cloud_ratios = config["trainer"]["obj_det_error_cloud_ratios"]
     config["trainer"]["thresholds"] = str(thresholds)
     config["trainer"]["recall_targets"] = str(recall_targets)
+    config["trainer"]["branch_degrees"] = str(branch_degrees)
+    config["trainer"]["obj_det_error_cloud_ratios"] = str(obj_det_error_cloud_ratios)
     run["parameters"] = config
     config["trainer"]["thresholds"] = thresholds
     config["trainer"]["recall_targets"] = recall_targets
+    config["trainer"]["branch_degrees"] = branch_degrees
+    config["trainer"]["obj_det_error_cloud_ratios"] = obj_det_error_cloud_ratios
 
     print("Tatal num workers", config['loader']['num_workers'])
     print("Batch size" , config['loader']['batch_size'])

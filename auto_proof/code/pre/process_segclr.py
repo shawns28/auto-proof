@@ -2,7 +2,7 @@ from auto_proof.code.pre import data_utils
 from auto_proof.code.pre.roots_at import get_roots_at
 from auto_proof.code.connectomics.reader import EmbeddingReader
 from auto_proof.code.connectomics.sharding import md5_shard
-from auto_proof.code.pre.segclr import get_segclr_emb, sharder
+from auto_proof.code.pre.segclr import get_segclr_emb, sharder, get_roots_at_seglcr_version
 
 import os
 import numpy as np
@@ -49,23 +49,23 @@ def main():
     # roots = ['864691134989083258_000'] # Same as above
     # roots = ['864691135133124000_000'] # eror: Bbox([np.int32(123921), np.int32(58980), np.int32(22466)],[np.int32(124049), np.int32(59108), np.int32(22498)], dtype=np.int32, unit='vx')
     
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
-    roots = [str(root) + '_000' for root in roots]
-    print(len(roots))
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
+    # roots = [str(root) + '_000' for root in roots]
+    # print(len(roots))
     
     # TODO: Uncomment
-    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
-    # print("roots original", len(roots))
+    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    print("roots original", len(roots))
 
-    # # TODO: Remove after 1300 gets segclr
-    # roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
-    # roots = np.setdiff1d(roots, roots_1300_unique_copied)
-    # print("roots after removing 1300", len(roots))
+    # TODO: Remove after 1300 gets segclr
+    roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
+    roots = np.setdiff1d(roots, roots_1300_unique_copied)
+    print("roots after removing 1300", len(roots))
 
-    # # TODO: Remove when actaully running the script since it can create edge cases
-    # already_processed = glob.glob(f'{segclr_dir}*')
-    # already_processed = [already_processed[i][-27:-5] for i in range(len(already_processed))]
-    # roots = np.intersect1d(roots, already_processed)
+    # TODO: Remove when actaully running the script since it can create edge cases
+    already_processed = glob.glob(f'{segclr_dir}*')
+    already_processed = [already_processed[i][-27:-5] for i in range(len(already_processed))]
+    roots = np.setdiff1d(roots, already_processed)
     # print("roots after removing already existing", len(roots))
 
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
@@ -89,6 +89,7 @@ def process_root(data):
         TODO: Fill in
     """
     root, data_config = data
+    # print("root", root)
 
     data_dir = data_config['data_dir']
     segclr_path = f'{data_dir}{data_config['segclr']['segclr_dir']}{root}.hdf5'
@@ -101,7 +102,7 @@ def process_root(data):
     
     # root at latest
     mat_versions = data_config['segclr']['mat_versions']
-    segmentation_version = get_roots_at_seglcr_version(root, data_dir, mat_versions)
+    segmentation_version = get_roots_at_seglcr_version(root, data_dir, mat_versions, False)
     if segmentation_version == 1300:
         print("root", root)
     # print("segmentation version", segmentation_version)
@@ -109,17 +110,19 @@ def process_root(data):
     cv_seg = CloudVolume(seg_path, use_https=True)
     resolution = np.array(data_config['segmentation']['resolution'])
     
-    status, e, root_at_arr = get_roots_at(feature_path, cv_seg, resolution)
-    # print("root at arr", root_at_arr)
-    # with h5py.File(f'{data_config['data_dir']}{data_config['labels']['roots_at_latest_dir']}{1300}/{root}.hdf5', 'r') as f:
-    #     print(f['roots_at'][:])
-    if status == False:
-        print("Failed to get roots at for root", root, "eror:", e)
-        root_without_iden = root[:-4]
-        error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_segclr_error_roots/{root_without_iden}"
-        with open(error_file_path, 'w') as file:
-            pass
-        return
+    with h5py.File(feature_path, 'r') as f:
+        vertices = f['vertices'][:]
+        status, e, root_at_arr = get_roots_at(vertices, cv_seg, resolution)
+        # print("root at arr", root_at_arr)
+        # with h5py.File(f'{data_config['data_dir']}{data_config['labels']['roots_at_latest_dir']}{1300}/{root}.hdf5', 'r') as f:
+        #     print(f['roots_at'][:])
+        if status == False:
+            print("Failed to get roots at for root", root, "eror:", e)
+            root_without_iden = root[:-4]
+            error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_segclr_error_roots/{root_without_iden}"
+            with open(error_file_path, 'w') as file:
+                pass
+            return
 
     filesystem = gcsfs.GCSFileSystem(token='anon')
     num_shards = data_config['segclr'][f'num_shards_{segmentation_version}']
@@ -131,14 +134,17 @@ def process_root(data):
     small_radius = data_config['segclr']['small_radius']
     large_radius = data_config['segclr']['large_radius']
 
-    status, e, segclr_emb, has_emb = get_segclr_emb(root, feature_path, root_at_arr, embedding_reader, emb_dim, visualize_radius, small_radius, large_radius)
-    if status == False:
-        print("Failed to segclr for root", root, "eror:", e)
-        root_without_iden = root[:-4]
-        error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_error_roots/{root_without_iden}"
-        with open(error_file_path, 'w') as file:
-            pass
-        return
+    with h5py.File(feature_path, 'r') as f:
+        vertices = f['vertices'][:]
+        edges = f['edges'][:]
+        status, e, segclr_emb, has_emb = get_segclr_emb(root, vertices, edges, root_at_arr, embedding_reader, emb_dim, visualize_radius, small_radius, large_radius)
+        if status == False:
+            print("Failed to segclr for root", root, "eror:", e)
+            root_without_iden = root[:-4]
+            error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_error_roots/{root_without_iden}"
+            with open(error_file_path, 'w') as file:
+                pass
+            return
     
     segclr_path = f'{data_dir}{data_config['segclr']['segclr_dir']}{root}.hdf5'
     roots_at_segclr_path = f'{data_dir}{data_config['segclr']['roots_at_segclr_dir']}{root}.hdf5'
@@ -152,29 +158,6 @@ def process_root(data):
         error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_file_error_roots/{root}"
         with open(error_file_path, 'w') as file:
             pass
-
-def get_roots_at_seglcr_version(root, data_dir, mat_versions):
-    """TODO: Fil in and mention the mat versions needs to be 3
-    
-    """
-    mat_version1 = mat_versions[0]
-    mat_version2 = mat_versions[1]
-    mat_version3 = mat_versions[2]
-    roots1 = data_utils.load_txt(f'{data_dir}roots_{mat_version1}_{mat_version2}/post_edit_roots.txt')
-    roots2 = data_utils.load_txt(f'{data_dir}proofread/{mat_version2}_unique.txt')
-    roots3 = data_utils.load_txt(f'{data_dir}roots_{mat_version2}_{mat_version3}/post_edit_roots.txt')
-    roots4 = data_utils.load_txt(f'{data_dir}proofread/{mat_version3}_unique.txt')
-
-    root_without_ident = root[:-4]
-    if root_without_ident in roots1:
-        segmentation_version = mat_version1
-    elif root_without_ident in roots2 or root_without_ident in roots3:
-        segmentation_version = mat_version2
-    elif root_without_ident in roots4:
-        segmentation_version = mat_version3
-    else:
-        raise Exception("Root not in any of the root lists")
-    return segmentation_version
 
 if __name__ == "__main__":
     main()

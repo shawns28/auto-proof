@@ -2,33 +2,39 @@
     "data": {
         "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/",
         "features_dir": "features/",
-        "labels_dir": "labels_at_1300/",
+        "labels_dir": "labels_at_1300_ignore_inbetween/",
         "segclr_dir": "segclr/",
         "proofread_dir": "proofread/",
-        "split_dir": "split_359227/",
-        "all_roots": "all_roots.txt",
-        "train_roots": "train_roots.txt",
-        "val_roots": "val_roots.txt",
-        "test_roots": "test_roots.txt",
-        "proofread_roots": "943_unique.txt",
-        "obj_det_val_roots":  "val_conf_no_error_in_box_roots.txt",
+        "split_dir": "split_598963/",
+        "all_roots": "all_roots_og.txt",
+        "train_roots": "train_roots_og.txt",
+        "val_roots": "val_roots_og.txt",
+        "test_roots": "test_roots_og.txt",
+        "proofread_roots": "943_1300.txt",
+        "obj_det_val_roots":  "val_conf_no_error_in_box_roots_og.txt",
         "mat_version_start": 343,
-        "mat_version_end": 943,
+        "mat_version_end": 1300,
         "box_cutoff": 100
     },
     "loader": {
-        "num_workers": 32,
+        "num_workers": 64,
         "prefetch_factor": 0,
         "batch_size": 32,
         "fov": 250,
         "feat_dim": 101,
-        "use_segclr": false
+        "use_segclr": true,
+        "relative_vertices": true,
+        "zscore_radius": true,
+        "zscore_segclr": false,
+        "l2_norm_segclr": false,
+        "zscore_pe": false
     },
     "model": {
         "num_classes": 1,
         "dim": 32,
-        "depth": 7,
-        "n_head": 8
+        "depth": 8,
+        "n_head": 7,
+        "rms_norm": false
     },
     "trainer": {
         "ckpt_dir": "ckpt/",
@@ -37,17 +43,23 @@
         "visualize_cutoff": 4000,
         "save_visual_every": 5,
         "show_tol": false,
-        "class_weights": 9.09,
+        "class_weights": 50,
         "conf_weight": 0.1,
         "tolerance_weight": 0.1,
         "box_weight": 0.5,
-        "max_dist": 2,
-        "thresholds": [0.01, 0.1, 0.4, 0.5, 0.6, 0.9, 0.99],
+        "max_dist": 1,
+        "thresholds": [0.01, 0.05, 0.1, 0.2, 0.4, 0.5, 0.9, 0.99],
         "recall_targets": [0.99, 0.95, 0.9, 0.5],
-        "obj_det_error_cloud_ratio": 0.2
+        "obj_det_error_cloud_ratios": [0.1, 0.2, 0.3],
+        "branch_degrees": [3, 4, 5]
     },
     "optimizer": {
         "epochs": 75,
         "lr": 0.0001
+    },
+    "whole_cell": {
+        "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/whole_cell/",
+        "skeleton_version": 4,
+        "pos_enc_dim": 32
     }
 }

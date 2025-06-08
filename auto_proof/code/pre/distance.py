@@ -9,17 +9,15 @@ import os
 import h5py
 import argparse
 
-def create_dist(root, feature_path, labels):
+def create_dist(root, edges, labels):
     """
     TODO: Fill in
     """
-    with h5py.File(feature_path, 'r') as f:
-        edges = f['edges'][:]
-        g = nx.Graph()
-        g.add_nodes_from(range(len(labels)))
-        g.add_edges_from(edges)
-        distances = get_distances(g, labels)
-        return distances
+    g = nx.Graph()
+    g.add_nodes_from(range(len(labels)))
+    g.add_edges_from(edges)
+    distances = get_distances(g, labels)
+    return distances
 
 def get_distances(g, labels):
     error_vertices = [v for v in range(len(labels)) if labels[v] == True]

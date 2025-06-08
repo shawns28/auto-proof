@@ -1,4 +1,5 @@
 from auto_proof.code.pre import data_utils
+from auto_proof.code.dataset import prune_edges
 
 import pandas as pd
 import numpy as np
@@ -37,7 +38,7 @@ def get_skel(datastack_name, skeleton_version, root, client):
                 return False, e, None
     return False, None, None # Shouldn't enter
 
-def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
+def process_skel(box_cutoff, cutoff, rep_coord, skel_dict):
     """NOTE/TODO: 
     Skeletonizes the roots and saves hdf5 files representing the cutoff number of nodes and their features
     which are pulled from cave client for the root. Additionally saves successful roots to txt.
@@ -47,10 +48,11 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
         skel_edges = np.array(skel_dict['edges'])
         skel_vertices = np.array(skel_dict['vertices'])
         skel_radii = np.array(skel_dict['radius'])
+
     except Exception as e:
         return False, e, None
 
-    if not is_proofread:
+    if not rep_coord:
         rep_index, _ = get_closest(skel_vertices, rep_coord)
     else:
         rep_index = np.random.randint(0, len(skel_vertices))
@@ -67,10 +69,11 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
         rank = rank[mask]
         new_skel_vertices = skel_vertices[mask]
         new_skel_radii = skel_radii[mask]
+            
     except Exception as e:
         return False, e, None
 
-    new_edges = prune_edges(mask, skel_edges)
+    new_edges = prune_edges(skel_edges, mask)
     
     feature_dict = {}
     feature_dict['num_initial_vertices'] = len(skel_vertices)
@@ -81,17 +84,8 @@ def process_skel(box_cutoff, cutoff, is_proofread, rep_coord, skel_dict):
 
     return True, None, feature_dict
 
-def prune_edges(mask_indices, skel_edges):
-    orig_to_new = {value: index for index, value in enumerate(mask_indices)}
-    edge_mask = np.zeros(len(skel_edges))
-    for i in range(len(skel_edges)):
-        edge = skel_edges[i]
-        if edge[0] in orig_to_new and edge[1] in orig_to_new:
-            skel_edges[i][0] = orig_to_new[edge[0]]
-            skel_edges[i][1] = orig_to_new[edge[1]]
-            edge_mask[i] = 1
-    return skel_edges[edge_mask.astype(bool)]
-
+# Makes sure that rep index is within box cutoff rank
+# Makes a rank where the rank[i] tells you the bfs rank of node i
 def create_rank(g, rep_index, skel_len, box_cutoff):
     rep_included = False
     while not rep_included:

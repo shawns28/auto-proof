@@ -1,6 +1,7 @@
 from auto_proof.code.dataset import AutoProofDataset, adjency_to_edge_list_torch_skip_diag, prune_edges, build_dataloader
 from auto_proof.code.pre import data_utils
 from auto_proof.code.model import create_model
+from auto_proof.code.visualize import get_root_output
 
 import torch
 import torch.nn as nn
@@ -24,15 +25,23 @@ class ObjectDetectionDataset(Dataset):
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
         self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}'
         self.box_cutoff = config['data']['box_cutoff']
+        self.branch_degrees = config['trainer']['branch_degrees']
         self.thresholds = config['trainer']['thresholds']
-        self.obj_det_error_cloud_ratio = config['trainer']['obj_det_error_cloud_ratio']
+        self.obj_det_error_cloud_ratios = config['trainer']['obj_det_error_cloud_ratios']
 
         self.roots = list(root_to_output.keys())
         self.manager = Manager()
         self.root_to_output = self.manager.dict(root_to_output)
         self.threshold_to_metrics = self.manager.dict()
         for threshold in self.thresholds:
-            self.threshold_to_metrics[threshold] = self.manager.dict({
+            for cloud_ratio in self.obj_det_error_cloud_ratios:
+                self.threshold_to_metrics[f'{threshold}_{cloud_ratio}'] = self.manager.dict({
+                    'conf_tp': 0,
+                    'conf_fn': 0, 
+                    'conf_fp': 0, 
+                })
+        for degree in self.branch_degrees:
+            self.threshold_to_metrics[degree] = self.manager.dict({
                 'conf_tp': 0,
                 'conf_fn': 0, 
                 'conf_fp': 0, 
@@ -52,6 +61,8 @@ class ObjectDetectionDataset(Dataset):
         try:
             with h5py.File(feature_path, 'r') as feat_f, h5py.File(labels_path, 'r') as labels_f:
                 labels = labels_f['labels'][:]
+                # if len(labels) < 20:
+                #     return ''
                 confidences = labels_f['confidences'][:]
 
                 rank = feat_f['rank'][:]
@@ -76,29 +87,64 @@ class ObjectDetectionDataset(Dataset):
                     threshold_to_output[threshold] = np.where(output > threshold, True, False)
 
                 g = nx.Graph()
+                g.add_nodes_from(range(len(labels)))
                 g.add_edges_from(edges)
+
+                degree_to_output = {}
+                node_degrees = g.degree()
+                node_degrees = np.array([degree for _, degree in node_degrees])
+                # print("node degrees", node_degrees)
+                for degree in self.branch_degrees:
+                    degree_to_output[degree] = np.where(node_degrees >= degree, True, False)
+                # print("degree_to_output", degree_to_output)
 
                 label_ccs = get_label_components(g, labels, box_cutoff_nodes)
                 
-                new_label_ccs, confidences = remove_isolated_errors(g, label_ccs, confidences)
-                label_ccs = new_label_ccs
-
+                label_ccs, confidences = remove_isolated_errors(g, label_ccs, confidences)
+                missed_error = False
+                found_error = False
                 for threshold in self.thresholds:
-                    output_ccs = get_output_components(g, threshold_to_output[threshold], confidences)
-                    output_ccs, conf_fp = remove_big_output_ccs(output_ccs, labels, self.obj_det_error_cloud_ratio, box_cutoff_nodes)
-                    conf_tp, conf_fn = count_shared_and_unshared(label_ccs, output_ccs)
-                    # if threshold == 0.5:
-                    #     if conf_fn > 0:
-                    #         print("root with missed error", root)
-                    self.threshold_to_metrics[threshold]['conf_tp'] += conf_tp
-                    self.threshold_to_metrics[threshold]['conf_fn'] += conf_fn
-                    self.threshold_to_metrics[threshold]['conf_fp'] += conf_fp
+                    output_ccs = get_output_components(g, threshold_to_output[threshold], confidences, box_cutoff_nodes)
+                    for cloud_ratio in self.obj_det_error_cloud_ratios:
+                        curr_output_ccs, conf_fp, conf_fn = remove_big_output_ccs(output_ccs, labels, cloud_ratio)
+                        conf_tp, missed_fn = count_shared_and_unshared(label_ccs, curr_output_ccs)
+                        conf_fn += missed_fn
 
+                        self.threshold_to_metrics[f'{threshold}_{cloud_ratio}']['conf_tp'] += conf_tp
+                        self.threshold_to_metrics[f'{threshold}_{cloud_ratio}']['conf_fn'] += conf_fn
+                        self.threshold_to_metrics[f'{threshold}_{cloud_ratio}']['conf_fp'] += conf_fp
+
+                        # For baseline
+                        if (threshold == 0.05 and cloud_ratio == 0.1) and conf_fn > 0:
+                            missed_error = True
+                        elif (threshold == 0.05 and cloud_ratio == 0.1) and conf_tp > 0:
+                            found_error = True
+
+                        # For no segclr
+                        # if (threshold == 0.1 and cloud_ratio == 0.1) and conf_fn > 0:
+                        #     missed_error = True
+                        # elif (threshold == 0.1 and cloud_ratio == 0.1) and conf_tp > 0:
+                        #     found_error = True
+
+                        # For including everything in core
+                        # if (threshold == 0.05 and cloud_ratio == 0.1) and conf_fn > 0:
+                        #     missed_error = True
+                        # elif (threshold == 0.05 and cloud_ratio == 0.1) and conf_tp > 0:
+                        #     found_error = True
+                for degree in self.branch_degrees:
+                    degree_ccs = get_output_components(g, degree_to_output[degree], confidences, box_cutoff_nodes)
+                    conf_tp, conf_fn = count_shared_and_unshared(label_ccs, degree_ccs)
+                    _, conf_fp = count_shared_and_unshared(degree_ccs, label_ccs)
+                    self.threshold_to_metrics[degree]['conf_tp'] += conf_tp
+                    self.threshold_to_metrics[degree]['conf_fn'] += conf_fn
+                    self.threshold_to_metrics[degree]['conf_fp'] += conf_fp                  
+                
+                return root, missed_error, found_error
         except Exception as e:
             print("root: ", root, "error: ", e)
-            return None
+            return None, False, False
             
-        return 1 
+        return '', False, False 
 
 # If any error locations are isolated with no confident non errors nearby 
 # then remove from label cc list and mark them as unconfident so they get ignored in output prediction
@@ -127,32 +173,33 @@ def get_label_components(graph, labels, box_cutoff_nodes):
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
-def get_output_components(graph, threshold_output, confidences):
-    subgraph_nodes = [i for i in range(len(confidences)) if (threshold_output[i] == True and confidences[i] == True)]
+def get_output_components(graph, output, confidences, box_cutoff_nodes):
+    # NOTE: Trying it withoout the confidences only check
+    subgraph_nodes = [i for i in range(len(confidences)) if ((output[i] == True and confidences[i] == True) and box_cutoff_nodes[i] == True)]
+    # subgraph_nodes = [i for i in range(len(confidences)) if (output[i] == True and box_cutoff_nodes[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
 # Removes output ccs that have too high of an output ratio and removes nodes that aren't in box cutoff after deciding if the cc should be removed
-def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio, box_cutoff_nodes):
+def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio):
     fp = 0
+    fn = 0
     new_output_ccs = []
     for cc in output_ccs:
         total = len(cc)
         count = 0
-        new_cc = set()
         for node in cc:
             if labels[node] == True: # TODO: Should I do this or no
                 count += 1
-            if box_cutoff_nodes[node]:
-                new_cc.add(node)
         ratio = count / total
         if ratio >= obj_det_error_cloud_ratio:
-            if len(new_cc) > 0:
-                new_output_ccs.append(new_cc)
-        if ratio == 0:
+            new_output_ccs.append(cc) 
+        elif ratio == 0:    
             fp += 1
-    return new_output_ccs, fp
+        else: # ratio between 0 and cloud_ratio, not specific enough cloud
+            fn += 1
+    return new_output_ccs, fp, fn
 
 def count_shared_and_unshared(list_of_sets1, list_of_sets2):
     shared = 0
@@ -186,13 +233,13 @@ def obj_det_dataloader(config, dataset):
             persistent_workers=persistent_workers,
             prefetch_factor=prefetch_factor)
 
-def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, obj_det_error_cloud_ratio, box_cutoff):
+def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cutoff, branch_degrees):
     recalls = []
     precisions = []
     for i in range(len(thresholds)):
         threshold = thresholds[i]
         # Using label tp instead of output tp for now
-        precision, recall = get_precision_and_recall(metrics_dict[threshold]['conf_tp'], metrics_dict[threshold]['conf_fn'], metrics_dict[threshold]['conf_fp'])
+        precision, recall = get_precision_and_recall(metrics_dict[f'{threshold}_{cloud_ratio}']['conf_tp'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fn'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fp'])
         precisions.append(precision)
         recalls.append(recall)
 
@@ -200,7 +247,7 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, obj_det_error_cloud_
     plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
     plt.xlabel('Recall', fontsize=14)
     plt.ylabel('Precision', fontsize=14)
-    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {obj_det_error_cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
+    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.xlim(0, 1)
@@ -208,9 +255,23 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, obj_det_error_cloud_
 
     for i in range(len(thresholds)):
         plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
+    
+    recalls = []
+    precisions = []
+    for branch_degree in branch_degrees:
+        # print("branch degree", branch_degree)
+        # Using label tp instead of output tp for now
+        precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
+        precisions.append(precision)
+        recalls.append(recall)
+    # print(precisions)
+    # print(recalls)
+    for i in range(len(branch_degrees)):
+        plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
+
     plt.legend()
     plt.grid(True)
-    save_path = f'{save_dir}obj_precision_recall_{epoch}.png'
+    save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}.png'
     plt.savefig(save_path)
     return save_path
 
@@ -227,8 +288,12 @@ if __name__ == "__main__":
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
     run_id = 'AUT-255'
     run_id = 'AUT-275' # first segclr
+    run_id = 'AUT-301'
+    run_id = 'AUT-322'
+    run_id = 'AUT-330' # baseline
+    run_id = 'AUT-331' # no segclr
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 20
+    epoch = 40
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
@@ -249,39 +314,48 @@ if __name__ == "__main__":
     # roots = ['864691136521643153_000']
     # roots = ['864691135463333789_000']
     # roots = ['864691135439772402_000']
+    # config['loader']['normalize'] = False
+    config['loader']['num_workers'] = 32
+    config['trainer']['obj_det_error_cloud_ratios'] = [0.1, 0.2, 0.3]
+    config['data']['all_roots'] = "all_roots_og.txt"
+    config['data']['train_roots'] = "train_roots_og.txt"
+    config['data']['val_roots'] = "val_roots_og.txt"
+    config['data']['test_roots'] = "test_roots_og.txt"
 
-    mode = 'all'
+    mode = 'val'
     data = AutoProofDataset(config, mode)
     # config['loader']['batch_size'] = 32
-    config['loader']['num_workers'] = 32
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
-    config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/shared_conf_no_error_in_box_roots.txt"
+    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/shared_conf_no_error_in_box_roots.txt"
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/sharedval_conf_no_error_in_box_roots.txt"
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"
     # config['trainer']['obj_det_error_cloud_ratio'] = 0.2
     # config['data']['box_cutoff'] = 100
     data_loader = build_dataloader(config, data, mode)
+    # config['trainer']['branch_degrees'] = [3, 4, 5]
 
     model.eval()
     with torch.no_grad():
         root_to_output = {}
 
+        # config['loader']['num_workers'] = 1
+        # roots = ['864691135657412579_000']
         # for root in roots:
         #     print("Getting root output")
         #     # Remember this doesn't pre mask so only use things above fov for testing right now
-        #     vertices, edges, labels, confidences, output, _, _, _, _ = get_root_output(model, device, data, root)
+        #     vertices, edges, labels, confidences, output, _, _, _, _, _ , _, _ = get_root_output(model, device, data, root)
         #     output = output.detach().cpu().numpy().squeeze(-1)
         #     root_to_output[root] = output
 
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
-        obj_det_roots = set(data_utils.load_txt(config['data']['obj_det_val_path']))
+        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/val_conf_no_error_in_box_roots_og.txt"))
 
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
-                roots, input, labels, confidences, dist_to_error, rank, adj = data
+                roots, input, labels, confidences, dist_to_error, rank, adj, _ = data
                 # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 input = input.float().to(device)
                 labels = labels.float().to(device)
@@ -307,22 +381,38 @@ if __name__ == "__main__":
         obj_det_data = ObjectDetectionDataset(config, root_to_output)
         obj_det_loader = obj_det_dataloader(config, obj_det_data)
         start_time = time.time()
+        missed_roots = []
+        found_roots = []
+        other_roots = []
         with tqdm(total=(len(obj_det_data) / config['loader']['batch_size']), desc="obj det all") as pbar:
             for i, data in enumerate(obj_det_loader):
+                roots, missed, found = data
+                for i, root in enumerate(roots):
+                    if missed[i]:
+                        missed_roots.append(root)
+                    elif found[i]:
+                        found_roots.append(root)
+                    else:
+                        other_roots.append(root)
+                
                 pbar.update()
         end_time = time.time()
-        print("time", end_time - start_time)
-        
+        # print("time", end_time - start_time)
+        # print("missed_roots", missed_roots)
+        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/'
+        data_utils.save_txt(f"{save_dir}missed.txt", missed_roots)
+        data_utils.save_txt(f"{save_dir}found.txt", found_roots)
+        data_utils.save_txt(f"{save_dir}other.txt", other_roots)
         metrics_dict = obj_det_data.__getmetrics__()
-        print("metrics at threshold 0.01", obj_det_data.__getmetrics__()[0.01])
-        print("metrics at threshold 0.4", obj_det_data.__getmetrics__()[0.4])
-        print("metrics at threshold 0.5", obj_det_data.__getmetrics__()[0.5])
-        print("metrics at threshold 0.6", obj_det_data.__getmetrics__()[0.6])
-        print("metrics at threshold 0.99", obj_det_data.__getmetrics__()[0.99])
+        
+        for cloud_ratio in config['trainer']['obj_det_error_cloud_ratios']:
+            save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
+        
+        print("metrics at threshold 0.01", obj_det_data.__getmetrics__()["0.01_0.2"])
+        print("metrics at threshold 0.4", obj_det_data.__getmetrics__()["0.4_0.2"])
+        print("metrics at threshold 0.5", obj_det_data.__getmetrics__()["0.5_0.2"])
+        print("metrics at threshold 0.99", obj_det_data.__getmetrics__()["0.99_0.2"])
 
-        # save_dir = run_dir
-        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/share_debugging/'
+        print("metrics at degree 3", obj_det_data.__getmetrics__()[3])
 
-        save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, config['trainer']['obj_det_error_cloud_ratio'], config['data']['box_cutoff'])
-    print("done")    
-
+    print("done")
