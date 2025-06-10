@@ -61,8 +61,8 @@ class ObjectDetectionDataset(Dataset):
         try:
             with h5py.File(feature_path, 'r') as feat_f, h5py.File(labels_path, 'r') as labels_f:
                 labels = labels_f['labels'][:]
-                # if len(labels) < 20:
-                #     return ''
+                if len(labels) < 20:
+                    return '', False, False
                 confidences = labels_f['confidences'][:]
 
                 rank = feat_f['rank'][:]
@@ -245,34 +245,138 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cut
 
     plt.figure(figsize=(8, 8))
     plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
-    plt.xlabel('Recall', fontsize=14)
-    plt.ylabel('Precision', fontsize=14)
-    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
+    plt.xlabel('Recall', fontsize=20)
+    plt.ylabel('Precision', fontsize=20)
+    # plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
     plt.xlim(0, 1)
     plt.ylim(0, 1)
 
     for i in range(len(thresholds)):
         plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
     
-    recalls = []
-    precisions = []
-    for branch_degree in branch_degrees:
-        # print("branch degree", branch_degree)
-        # Using label tp instead of output tp for now
-        precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
-        precisions.append(precision)
-        recalls.append(recall)
-    # print(precisions)
-    # print(recalls)
-    for i in range(len(branch_degrees)):
-        plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
+    # recalls = []
+    # precisions = []
+    # for branch_degree in branch_degrees:
+    #     # print("branch degree", branch_degree)
+    #     # Using label tp instead of output tp for now
+    #     precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
+    #     precisions.append(precision)
+    #     recalls.append(recall)
+    # # print(precisions)
+    # # print(recalls)
+    # for i in range(len(branch_degrees)):
+    #     plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
 
-    plt.legend()
+    # plt.legend()
     plt.grid(True)
     save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}.png'
     plt.savefig(save_path)
+    return save_path
+
+def obj_det_plot_legend(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cutoff, branch_degrees):
+    recalls = []
+    precisions = []
+    for i in range(len(thresholds)):
+        threshold = thresholds[i]
+        # Using label tp instead of output tp for now
+        precision, recall = get_precision_and_recall(metrics_dict[f'{threshold}_{cloud_ratio}']['conf_tp'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fn'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fp'])
+        precisions.append(precision)
+        recalls.append(recall)
+
+    plt.figure(figsize=(8, 8))
+    plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
+    plt.xlabel('Recall', fontsize=20)
+    plt.ylabel('Precision', fontsize=20)
+    # plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+
+    for i in range(len(thresholds)):
+        plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
+    
+    # recalls = []
+    # precisions = []
+    # for branch_degree in branch_degrees:
+    #     # print("branch degree", branch_degree)
+    #     # Using label tp instead of output tp for now
+    #     precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
+    #     precisions.append(precision)
+    #     recalls.append(recall)
+    # # print(precisions)
+    # # print(recalls)
+    # for i in range(len(branch_degrees)):
+    #     plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
+
+    plt.legend()
+    plt.grid(True)
+    save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}_ledeng.png'
+    plt.savefig(save_path)
+    return save_path
+
+def plot_branch_statistics(metrics_dict, branch_degrees, epoch, save_dir, cloud_ratio, box_cutoff):
+    """
+    Generates and saves a precision-recall plot specifically for branch statistics.
+
+    Args:
+        metrics_dict (dict): A dictionary containing 'conf_tp', 'conf_fn', and 'conf_fp'
+                             for different branch degrees.
+        branch_degrees (list): A list of branch degree values to plot.
+        epoch (int): The current epoch number, used in the plot title and filename.
+        save_dir (str): The directory where the plot will be saved.
+        cloud_ratio (float): The cloud ratio, used in the plot title and filename.
+        box_cutoff (float): The box cutoff value, used in the plot title.
+    """
+    recalls = []
+    precisions = []
+
+    # Assuming get_precision_and_recall is defined elsewhere and works correctly
+    # def get_precision_and_recall(tp, fn, fp):
+    #     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    #     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    #     return precision, recall
+
+    for branch_degree in branch_degrees:
+        # It's good practice to handle cases where a branch_degree might be missing
+        if branch_degree in metrics_dict:
+            precision, recall = get_precision_and_recall(
+                metrics_dict[branch_degree]['conf_tp'],
+                metrics_dict[branch_degree]['conf_fn'],
+                metrics_dict[branch_degree]['conf_fp']
+            )
+            precisions.append(precision)
+            recalls.append(recall)
+        else:
+            print(f"Warning: No metrics found for branch degree: {branch_degree}")
+            recalls.append(0) # or some other default
+            precisions.append(0) # or some other default
+
+    plt.figure(figsize=(8, 8))
+    
+    # Plotting the line connecting the points
+    plt.plot(recalls, precisions, linestyle='-', marker='o', color='blue', label='Branch Precision-Recall Curve')
+
+    # Plotting individual points with labels
+    for i in range(len(branch_degrees)):
+        plt.scatter(recalls[i], precisions[i], c='red', s=50, zorder=5, # zorder to ensure dots are on top of the line
+                    label=f'Degree: {branch_degrees[i]}, P: {precisions[i]:.2f}, R: {recalls[i]:.2f}')
+
+    plt.xlabel('Recall', fontsize=20)
+    plt.ylabel('Precision', fontsize=20)
+    # plt.title(f'Branch Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}', fontsize=16)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    # plt.legend(fontsize=10)
+    plt.grid(True)
+    
+    save_path = f'{save_dir}branch_precision_recall_{epoch}_{cloud_ratio}.png'
+    plt.savefig(save_path)
+    plt.close() # Close the plot to free up memory
     return save_path
 
 def get_precision_and_recall(tp, fn, fp):
@@ -291,13 +395,16 @@ if __name__ == "__main__":
     run_id = 'AUT-301'
     run_id = 'AUT-322'
     run_id = 'AUT-330' # baseline
-    run_id = 'AUT-331' # no segclr
+    # run_id = 'AUT-331' # no segclr
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 40
+    # epoch = 40
+    epoch = 60
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
     # config = data_utils.get_config('base')
+    if run_id == 'AUT-330':
+        config['data']['labels_dir'] = "labels_at_1300_ignore_inbetween/"
     
     model = create_model(config)
 
@@ -322,7 +429,7 @@ if __name__ == "__main__":
     config['data']['val_roots'] = "val_roots_og.txt"
     config['data']['test_roots'] = "test_roots_og.txt"
 
-    mode = 'val'
+    mode = 'train'
     data = AutoProofDataset(config, mode)
     # config['loader']['batch_size'] = 32
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
@@ -350,7 +457,7 @@ if __name__ == "__main__":
 
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
-        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/val_conf_no_error_in_box_roots_og.txt"))
+        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/train_conf_no_error_in_box_roots_og.txt"))
 
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
@@ -399,15 +506,20 @@ if __name__ == "__main__":
         end_time = time.time()
         # print("time", end_time - start_time)
         # print("missed_roots", missed_roots)
-        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/'
+        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/plots_before_pres/'
         data_utils.save_txt(f"{save_dir}missed.txt", missed_roots)
         data_utils.save_txt(f"{save_dir}found.txt", found_roots)
         data_utils.save_txt(f"{save_dir}other.txt", other_roots)
         metrics_dict = obj_det_data.__getmetrics__()
         
-        for cloud_ratio in config['trainer']['obj_det_error_cloud_ratios']:
-            save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
-        
+        # branch model
+        cloud_ratio = 0.1
+        save_path = plot_branch_statistics(metrics_dict, config['trainer']['branch_degrees'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'])
+
+        # for cloud_ratio in config['trainer']['obj_det_error_cloud_ratios']:
+        save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
+        save_path = obj_det_plot_legend(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
+
         print("metrics at threshold 0.01", obj_det_data.__getmetrics__()["0.01_0.2"])
         print("metrics at threshold 0.4", obj_det_data.__getmetrics__()["0.4_0.2"])
         print("metrics at threshold 0.5", obj_det_data.__getmetrics__()["0.5_0.2"])

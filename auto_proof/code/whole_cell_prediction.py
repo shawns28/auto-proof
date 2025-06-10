@@ -256,6 +256,8 @@ if __name__ == "__main__":
     # root = "864691134928303015_000"
     # root = "864691135785368358_000"
     root = "864691135594727723_000"
+    root = "864691135385310293_000"
+    root = "864691137196879425_000"
     root_dict = get_root_dict(root, client_config, data_config, config)
 
     ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   

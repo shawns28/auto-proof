@@ -216,21 +216,15 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
     v1_valid = vertex_is_valid[edge_v1_indices]
     v2_valid = vertex_is_valid[edge_v2_indices]
     edge_is_valid = v1_valid & v2_valid
-    edge_is_non_valid = ~edge_is_valid
-    valid_edges = edges[edge_is_valid]
-    # Create the lines array for valid edges in VTK format
-    valid_lines = np.column_stack([np.full(len(valid_edges), 2), valid_edges]).ravel()
 
-    non_valid_edges = edges[edge_is_non_valid]
-    non_valid_lines = np.column_stack([np.full(len(non_valid_edges), 2), non_valid_edges]).ravel()
+    # All edges will be black, so we don't need to separate valid and non-valid for coloring
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
 
-    skel_poly_valid = pv.PolyData(vertices, lines=valid_lines)
-    skel_poly_non_valid = pv.PolyData(vertices, lines=non_valid_lines)
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
 
-    labels = labels.squeeze(-1).detach().cpu().numpy() # (original, )
-    confidences = confidences.squeeze(-1).detach().cpu().numpy() # (original, )
-    output = output.squeeze(-1).detach().cpu().numpy() # (original, 1)
-    dist_to_error = dist_to_error.squeeze(-1).detach().cpu().numpy() # (original, )
+    labels = labels.squeeze(-1).detach().cpu().numpy()  # (original, )
+    confidences = confidences.squeeze(-1).detach().cpu().numpy()  # (original, )
+    output = output.squeeze(-1).detach().cpu().numpy()  # (original, 1)
 
     combined = labels * 2 + confidences
     c_m = (combined == 3).astype(bool)
@@ -241,15 +235,10 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
     # 2 = non-confident non-merge
     # 3 = confident non-merge
 
-    if show_tol:
-        dist_mask_inc = np.logical_and(dist_to_error > 0, dist_to_error <= max_dist)
-        dist_mask_exc = np.logical_or(dist_to_error == 0, dist_to_error > max_dist)
-
     pv.global_theme.multi_rendering_splitting_position = 0.5
 
     pv.start_xvfb()
     plotter = pv.Plotter(shape="1/2", off_screen=True, border=True, border_color='black')
-    # All labels don't work for interactive
     plotter.add_title("Visualization")
 
     confident_merge_indices = np.where(combined == 3)[0]
@@ -262,11 +251,8 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
         center_of_mass = vertices.mean(axis=0)  # Use center of all points as fallback
 
     plotter.subplot(0)
-    if skel_poly_valid.n_cells > 0:
-        plotter.add_mesh(skel_poly_valid, color='red')
-
-    if skel_poly_valid.n_cells > 0:
-        plotter.add_mesh(skel_poly_non_valid, color='black')
+    if skel_poly_all_edges.n_cells > 0:
+        plotter.add_mesh(skel_poly_all_edges, color='black') # All edges are now black
 
     color_hex = "#B40426"  # Hexadecimal code for deep red
     deep_red = pv.Color(color_hex)
@@ -274,35 +260,19 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
     light_blue = pv.Color(color_hex)
     color_hex = "#3B4CC0"  # Hexadecimal code for deep blue
     deep_blue = pv.Color(color_hex)
-    color_hex = "#FFD580" # Hexadecimal code for light orange
-    light_orange = pv.Color(color_hex)
 
     # Define the mask for valid points for the label plot
     valid_points_mask_for_label_plot = vertex_is_valid
 
-    if show_tol:
-        # Confident Merge (c_m) AND valid AND (dist_mask_exc)
-        if len(vertices[c_m & valid_points_mask_for_label_plot & dist_mask_exc]) > 0:
-            plotter.add_points(vertices[c_m & valid_points_mask_for_label_plot & dist_mask_exc], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-        # Non-Confident Non-Merge (nc_nm) AND valid AND (dist_mask_exc)
-        if len(vertices[nc_nm & valid_points_mask_for_label_plot & dist_mask_exc]) > 0:
-            plotter.add_points(vertices[nc_nm & valid_points_mask_for_label_plot & dist_mask_exc], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-        # Confident Non-Merge (c_nm) AND valid AND (dist_mask_exc)
-        if len(vertices[c_nm & valid_points_mask_for_label_plot & dist_mask_exc]) > 0:
-            plotter.add_points(vertices[c_nm & valid_points_mask_for_label_plot & dist_mask_exc], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-        # Tolerance points (dist_mask_inc) AND valid
-        if len(vertices[dist_mask_inc & valid_points_mask_for_label_plot]) > 0:
-            plotter.add_points(vertices[dist_mask_inc & valid_points_mask_for_label_plot], color=light_orange, label='tolerance points', point_size=10, render_points_as_spheres=True, show_vertices=True)
-    else:
-        # Confident Merge (c_m) AND valid
-        if len(vertices[c_m & valid_points_mask_for_label_plot]) > 0:
-            plotter.add_points(vertices[c_m & valid_points_mask_for_label_plot], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-        # Non-Confident Non-Merge (nc_nm) AND valid
-        if len(vertices[nc_nm & valid_points_mask_for_label_plot]) > 0:
-            plotter.add_points(vertices[nc_nm & valid_points_mask_for_label_plot], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
-        # Confident Non-Merge (c_nm) AND valid
-        if len(vertices[c_nm & valid_points_mask_for_label_plot]) > 0:
-            plotter.add_points(vertices[c_nm & valid_points_mask_for_label_plot], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    # Confident Merge (c_m) AND valid
+    if len(vertices[c_m & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[c_m & valid_points_mask_for_label_plot], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    # Non-Confident Non-Merge (nc_nm) AND valid
+    if len(vertices[nc_nm & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[nc_nm & valid_points_mask_for_label_plot], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    # Confident Non-Merge (c_nm) AND valid
+    if len(vertices[c_nm & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[c_nm & valid_points_mask_for_label_plot], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
 
     # Now, add the explicitly invalid points in black.
     # These are the points where vertex_is_valid is FALSE.
@@ -317,7 +287,6 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
             show_vertices=True
         )
 
-    # Doesn't work for interactive
     plotter.add_legend()
     plotter.add_text("Labels", font_size=14)
 
@@ -326,12 +295,8 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
     plotter.subplot_border_visible = True
 
     plotter.subplot(1)
-    if skel_poly_valid.n_cells > 0:
-        plotter.add_mesh(skel_poly_valid, color='red')
-
-    if skel_poly_valid.n_cells > 0:
-        plotter.add_mesh(skel_poly_non_valid, color='black')
-
+    if skel_poly_all_edges.n_cells > 0:
+        plotter.add_mesh(skel_poly_all_edges, color='black') # All edges are now black
 
     valid_vertices_for_output = vertices[vertex_is_valid]
     valid_output_scalars = output[vertex_is_valid]
@@ -353,7 +318,7 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
             point_size=10,
             render_points_as_spheres=True,
             show_vertices=True,
-            scalar_bar_args={'title':'predictions'} # Ensure scalar bar shows full [0,1] range
+            scalar_bar_args={'title': 'predictions'}  # Ensure scalar bar shows full [0,1] range
         )
 
     # Add invalid points (rank >= box_cutoff) in black
@@ -367,8 +332,6 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
             show_vertices=True
         )
 
-
-    # Doesn't work for interactive it seems
     plotter.add_text("Output", font_size=14)
     plotter.link_views()
 
@@ -377,6 +340,7 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
     plotter.link_views()
 
     plotter.export_html(path)
+
 def visualize_segclr(vertices, edges, segclr_nodes, too_far_small_radius_indices, too_far_large_radius_indices, path):
     pv.set_jupyter_backend('trame')
     lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
@@ -409,7 +373,6 @@ def visualize_segclr(vertices, edges, segclr_nodes, too_far_small_radius_indices
     plotter.export_html(path)
 
 def visualize_pca_segclr(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, output_with_threshold, box_cutoff, threshold, path):
-    
     pv.set_jupyter_backend('trame')
     lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
     # print("edges", edges)
@@ -542,6 +505,434 @@ def visualize_pca_segclr(vertices, edges, labels, confidences, root_mesh, pca_se
     plotter.add_points(vertices_output, scalars=output_with_threshold, label='threshold', cmap=cmap, point_size=10, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':f'threshold at {threshold}'})
     # Doesn't work for interactive it seems
     plotter.add_text("Output", font_size=14) 
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_skeleton_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally: 1 row, 2 columns
+    plotter = pv.Plotter(shape=(1, 2), off_screen=True, border=True, border_color='black')
+
+    # Calculate center of mass for camera focal point (using all vertices for simplicity)
+    center_of_mass = vertices.mean(axis=0)
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (row 0, column 0)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+    # --- Plot 2: Skeleton with Black Points ---
+    plotter.subplot(0, 1) # Second subplot (row 0, column 1)
+    plotter.add_title("Skeleton with Black Points")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+    plotter.add_points(vertices, color='black', point_size=15, render_points_as_spheres=True, show_vertices=True)
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_labels_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally: 1 row, 2 columns
+    plotter = pv.Plotter(shape=(1, 2), off_screen=True, border=True, border_color='black')
+
+     # Process labels and confidences for coloring
+    combined = labels * 2 + confidences
+    c_m = (combined == 3).astype(bool)  # Confident Merge (labels=1, confidences=1)
+    nc_nm = (combined == 0).astype(bool) # Non-Confident Non-Merge (labels=0, confidences=0)
+    c_nm = (combined == 1).astype(bool)  # Confident Non-Merge (labels=0, confidences=1)
+
+    # Calculate center of mass for camera focal point
+    confident_merge_indices = np.where(c_m)[0]
+    if len(confident_merge_indices) > 0:
+        center_of_mass = vertices[confident_merge_indices].mean(axis=0)
+    else:
+        center_of_mass = vertices.mean(axis=0) # Fallback if no confident merges
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (row 0, column 0)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+
+    # --- Plot 2: Labels ---
+    plotter.subplot(0, 1)
+    plotter.add_title("Labels")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Define colors for labels using pv.Color for consistency and PyVista compatibility
+    deep_red = pv.Color("#B40426") # Confident Merge Error
+    light_blue = pv.Color("#869BBF") # Non-Confident Non-Merge Error
+    deep_blue = pv.Color("#3B4CC0") # Confident Non-Merge Error
+    
+    vertex_is_valid = rank < box_cutoff
+
+    # Define the mask for valid points for the label plot
+    valid_points_mask_for_label_plot = vertex_is_valid
+
+    # Confident Merge (c_m) AND valid
+    if len(vertices[c_m & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[c_m & valid_points_mask_for_label_plot], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    # Non-Confident Non-Merge (nc_nm) AND valid
+    if len(vertices[nc_nm & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[nc_nm & valid_points_mask_for_label_plot], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    # Confident Non-Merge (c_nm) AND valid
+    if len(vertices[c_nm & valid_points_mask_for_label_plot]) > 0:
+        plotter.add_points(vertices[c_nm & valid_points_mask_for_label_plot], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+
+    # Now, add the explicitly invalid points in black.
+    # These are the points where vertex_is_valid is FALSE.
+    invalid_vertices_for_label_plot = vertices[~vertex_is_valid]
+    if len(invalid_vertices_for_label_plot) > 0:
+        plotter.add_points(
+            invalid_vertices_for_label_plot,
+            color='black',
+            label='invalid points (rank >= cutoff)',
+            point_size=5,
+            render_points_as_spheres=True,
+            show_vertices=True
+        )
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_segclr_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally
+    plotter = pv.Plotter(shape=(1, 3), off_screen=True, border=True, border_color='black')
+
+    # Determine valid vertices based on box_cutoff
+    vertex_is_valid = rank < box_cutoff
+
+    # Process labels and confidences for coloring
+    combined = labels * 2 + confidences
+    c_m = (combined == 3).astype(bool)  # Confident Merge (labels=1, confidences=1)
+    nc_nm = (combined == 0).astype(bool) # Non-Confident Non-Merge (labels=0, confidences=0)
+    c_nm = (combined == 1).astype(bool)  # Confident Non-Merge (labels=0, confidences=1)
+
+    # Calculate center of mass for camera focal point
+    confident_merge_indices = np.where(c_m)[0]
+    if len(confident_merge_indices) > 0:
+        center_of_mass = vertices[confident_merge_indices].mean(axis=0)
+    else:
+        center_of_mass = vertices.mean(axis=0) # Fallback if no confident merges
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (0-indexed)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+    # --- Plot 2: PCA Percentile ---
+    plotter.subplot(0, 2)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    pca_segclr_percentile[has_emb == False] = np.ones(3)
+    plotter.add_points(vertices, scalars=pca_segclr_percentile, point_size=10, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'segclr_pca'})
+    plotter.link_views()
+
+
+    # --- Plot 3: Labels ---
+    plotter.subplot(0, 1)
+    plotter.add_title("Labels")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Define colors for labels using pv.Color for consistency and PyVista compatibility
+    deep_red = pv.Color("#B40426") # Confident Merge Error
+    light_blue = pv.Color("#869BBF") # Non-Confident Non-Merge Error
+    deep_blue = pv.Color("#3B4CC0") # Confident Non-Merge Error
+
+    # Points for coloring based on labels/confidence, only for valid vertices
+    if len(vertices[c_m]) > 0:
+        plotter.add_points(vertices[c_m], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[nc_nm]) > 0:
+        plotter.add_points(vertices[nc_nm], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[c_nm]) > 0:
+        plotter.add_points(vertices[c_nm], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_map_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally
+    plotter = pv.Plotter(shape=(1, 3), off_screen=True, border=True, border_color='black')
+
+    # Determine valid vertices based on box_cutoff
+    vertex_is_valid = rank < box_cutoff
+
+    # Process labels and confidences for coloring
+    combined = labels * 2 + confidences
+    c_m = (combined == 3).astype(bool)  # Confident Merge (labels=1, confidences=1)
+    nc_nm = (combined == 0).astype(bool) # Non-Confident Non-Merge (labels=0, confidences=0)
+    c_nm = (combined == 1).astype(bool)  # Confident Non-Merge (labels=0, confidences=1)
+
+    # Calculate center of mass for camera focal point
+    confident_merge_indices = np.where(c_m)[0]
+    if len(confident_merge_indices) > 0:
+        center_of_mass = vertices[confident_merge_indices].mean(axis=0)
+    else:
+        center_of_mass = vertices.mean(axis=0) # Fallback if no confident merges
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (0-indexed)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+    # --- Plot 2: Map PE ---
+    plotter.subplot(0, 2)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    plotter.add_points(vertices, scalars=pca_pe, point_size=10, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'pe_pca'})
+    plotter.link_views()
+
+
+    # --- Plot 4: Labels ---
+    plotter.subplot(0, 1)
+    plotter.add_title("Labels")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Define colors for labels using pv.Color for consistency and PyVista compatibility
+    deep_red = pv.Color("#B40426") # Confident Merge Error
+    light_blue = pv.Color("#869BBF") # Non-Confident Non-Merge Error
+    deep_blue = pv.Color("#3B4CC0") # Confident Non-Merge Error
+
+    # Points for coloring based on labels/confidence, only for valid vertices
+    if len(vertices[c_m]) > 0:
+        plotter.add_points(vertices[c_m], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[nc_nm]) > 0:
+        plotter.add_points(vertices[nc_nm], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[c_nm]) > 0:
+        plotter.add_points(vertices[c_nm], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_map_segclr_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally
+    plotter = pv.Plotter(shape=(1, 4), off_screen=True, border=True, border_color='black')
+
+    # Determine valid vertices based on box_cutoff
+    vertex_is_valid = rank < box_cutoff
+
+    # Process labels and confidences for coloring
+    combined = labels * 2 + confidences
+    c_m = (combined == 3).astype(bool)  # Confident Merge (labels=1, confidences=1)
+    nc_nm = (combined == 0).astype(bool) # Non-Confident Non-Merge (labels=0, confidences=0)
+    c_nm = (combined == 1).astype(bool)  # Confident Non-Merge (labels=0, confidences=1)
+
+    # Calculate center of mass for camera focal point
+    confident_merge_indices = np.where(c_m)[0]
+    if len(confident_merge_indices) > 0:
+        center_of_mass = vertices[confident_merge_indices].mean(axis=0)
+    else:
+        center_of_mass = vertices.mean(axis=0) # Fallback if no confident merges
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (0-indexed)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+    # --- Plot 3: PCA Percentile ---
+    plotter.subplot(0, 2)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    pca_segclr_percentile[has_emb == False] = np.ones(3)
+    plotter.add_points(vertices, scalars=pca_segclr_percentile, point_size=15, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'segclr_pca'})
+    plotter.link_views()
+
+    # --- Plot 2: Map PE ---
+    plotter.subplot(0, 3)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    plotter.add_points(vertices, scalars=pca_pe, point_size=15, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'pe_pca'})
+    plotter.link_views()
+
+    # --- Plot 4: Labels ---
+    plotter.subplot(0, 1)
+    plotter.add_title("Labels")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Define colors for labels using pv.Color for consistency and PyVista compatibility
+    deep_red = pv.Color("#B40426") # Confident Merge Error
+    light_blue = pv.Color("#869BBF") # Non-Confident Non-Merge Error
+    deep_blue = pv.Color("#3B4CC0") # Confident Non-Merge Error
+
+    # Points for coloring based on labels/confidence, only for valid vertices
+    if len(vertices[c_m]) > 0:
+        plotter.add_points(vertices[c_m], color=deep_red, label='confident merge error', point_size=15, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[nc_nm]) > 0:
+        plotter.add_points(vertices[nc_nm], color=light_blue, label='non-confident non-merge error', point_size=15, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[c_nm]) > 0:
+        plotter.add_points(vertices[c_nm], color=deep_blue, label='confident non-merge error', point_size=15, render_points_as_spheres=True, show_vertices=True)
+    plotter.link_views()
+
+    plotter.export_html(path)
+
+def visualize_map_segclr_output_pres(vertices, edges, labels, confidences, root_mesh, pca_segclr_percentile, has_emb, radius, output, rank, pca_pe, box_cutoff, threshold, path):
+    pv.set_jupyter_backend('trame')
+
+    # Prepare skeleton edges for rendering (all black)
+    all_lines = np.column_stack([np.full(len(edges), 2), edges]).ravel()
+    skel_poly_all_edges = pv.PolyData(vertices, lines=all_lines)
+
+    pv.start_xvfb()
+    # Arrange subplots horizontally
+    plotter = pv.Plotter(shape=(1, 5), off_screen=True, border=True, border_color='black')
+
+    # Determine valid vertices based on box_cutoff
+    vertex_is_valid = rank < box_cutoff
+
+    # Process labels and confidences for coloring
+    combined = labels * 2 + confidences
+    c_m = (combined == 3).astype(bool)  # Confident Merge (labels=1, confidences=1)
+    nc_nm = (combined == 0).astype(bool) # Non-Confident Non-Merge (labels=0, confidences=0)
+    c_nm = (combined == 1).astype(bool)  # Confident Non-Merge (labels=0, confidences=1)
+
+    # Calculate center of mass for camera focal point
+    confident_merge_indices = np.where(c_m)[0]
+    if len(confident_merge_indices) > 0:
+        center_of_mass = vertices[confident_merge_indices].mean(axis=0)
+    else:
+        center_of_mass = vertices.mean(axis=0) # Fallback if no confident merges
+
+    plotter.camera.tight()
+    plotter.camera.focal_point = center_of_mass
+    plotter.subplot_border_visible = True
+    pv.global_theme.multi_rendering_splitting_position = 0.5 # Ensure consistent splitting
+
+    # --- Plot 1: Root Mesh ---
+    plotter.subplot(0, 0) # First subplot (0-indexed)
+    plotter.add_title("Root Mesh")
+    plotter.add_mesh(root_mesh, color="lightgrey", opacity=0.5)
+    plotter.link_views()
+
+    # --- Plot 3: PCA Percentile ---
+    plotter.subplot(0, 1)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    pca_segclr_percentile[has_emb == False] = np.ones(3)
+    plotter.add_points(vertices, scalars=pca_segclr_percentile, point_size=10, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'segclr_pca'})
+    plotter.link_views()
+
+    # --- Plot 2: Map PE ---
+    plotter.subplot(0, 2)
+    plotter.add_mesh(skel_poly_all_edges, color='black')
+    plotter.add_points(vertices, scalars=pca_pe, point_size=10, rgb=True, render_points_as_spheres=True, show_vertices=True, scalar_bar_args={'title':'pe_pca'})
+    plotter.link_views()
+
+    # --- Plot 4: Labels ---
+    plotter.subplot(0, 3)
+    plotter.add_title("Labels")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Define colors for labels using pv.Color for consistency and PyVista compatibility
+    deep_red = pv.Color("#B40426") # Confident Merge Error
+    light_blue = pv.Color("#869BBF") # Non-Confident Non-Merge Error
+    deep_blue = pv.Color("#3B4CC0") # Confident Non-Merge Error
+
+    # Points for coloring based on labels/confidence, only for valid vertices
+    if len(vertices[c_m]) > 0:
+        plotter.add_points(vertices[c_m], color=deep_red, label='confident merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[nc_nm]) > 0:
+        plotter.add_points(vertices[nc_nm], color=light_blue, label='non-confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    if len(vertices[c_nm]) > 0:
+        plotter.add_points(vertices[c_nm], color=deep_blue, label='confident non-merge error', point_size=10, render_points_as_spheres=True, show_vertices=True)
+    plotter.link_views()
+
+    # --- Plot 5: Output ---
+    plotter.subplot(0, 4)
+    plotter.add_title("Output Predictions")
+    plotter.add_mesh(skel_poly_all_edges, color='black') # All edges black
+
+    # Prepare scalars for the output plot, including dummy values for 0 and 1 range for scalar bar
+    output_scalars_for_colorbar = np.append(output, [0., 1.])
+    vertices_for_output_colorbar = np.concatenate((vertices, np.zeros((1, 3)), np.ones((1, 3))), axis=0)
+
+    # Use the custom threshold colormap for output
+    cmap_custom_threshold = create_custom_threshold_red_colormap(threshold=threshold)
+
+    # Add valid points with the colormap based on their 'output' scalar values
+    valid_vertices_output_plot = vertices[vertex_is_valid]
+    valid_output_scalars = output[vertex_is_valid]
+    if len(valid_vertices_output_plot) > 0:
+        plotter.add_points(
+            valid_vertices_output_plot,
+            scalars=valid_output_scalars,
+            label='Predictions',
+            cmap=cmap_custom_threshold,
+            point_size=10,
+            render_points_as_spheres=True,
+            show_vertices=True,
+            scalar_bar_args={'title': 'Predictions'}
+        )
+
+    # Add invalid points (rank >= box_cutoff) in black for the Output plot
+    invalid_vertices_for_output_plot = vertices[~vertex_is_valid]
+    if len(invalid_vertices_for_output_plot) > 0:
+        plotter.add_points(
+            invalid_vertices_for_output_plot,
+            color='black',
+            label='Invalid Points (rank >= cutoff)',
+            point_size=5,
+            render_points_as_spheres=True,
+            show_vertices=True
+        )
     plotter.link_views()
 
     plotter.export_html(path)
@@ -714,7 +1105,8 @@ if __name__ == "__main__":
     if run_id == 'AUT-330':
         config['data']['labels_dir'] = "labels_at_1300_ignore_inbetween/"
 
-    data = AutoProofDataset(config, 'val')
+    config['loader']['fov'] = 250
+    data = AutoProofDataset(config, 'all')
     # config['model']['depth'] = 3
     # config['model']['n_head'] = 4
     model = create_model(config)
@@ -724,6 +1116,7 @@ if __name__ == "__main__":
     # ckpt_path = f'{run_dir}model_55.pt'
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+  
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict)
     model.to(device)
@@ -760,7 +1153,6 @@ if __name__ == "__main__":
     config['trainer']['visualize_cutoff'] = 4000
     config['trainer']['branch_degrees'] = [3, 4, 5]
     box_cutoff = config['data']['box_cutoff']
-    config['loader']['fov'] = 500
     # config['trainer']['show_tol'] = False
     # roots = ['864691135463333789_000']
     # roots = ['864691135778235581_000']
@@ -773,14 +1165,25 @@ if __name__ == "__main__":
     # roots = ['864691135657412579_000']
     # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/missed_roots_301.txt")
     # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/val_conf_no_error_in_box_roots_og.txt")
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/intersect_nosegclr.txt")
+    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/intersect_nosegclr.txt")
+    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_sven/found_0.05thres_0.1cloud_valincluding.txt")
     # roots = roots[:2]
-    roots = np.random.choice(roots, size=20, replace=False)
-    roots = ['864691136380179925_000']
-    roots = ['864691135101202976_000', '864691135645858543_000', '864691135698811781_000', '864691136239194172_000', '864691136889944242_000']
-    roots = ['864691135187356435_000']
-    roots = ['864691135594727723_000']
+    roots = np.random.choice(roots, size=30, replace=False)
+    # roots = ['864691136380179925_000']
+    # roots = ['864691135101202976_000', '864691135645858543_000', '864691135698811781_000', '864691136239194172_000', '864691136889944242_000']
+    # roots = ['864691135187356435_000']
+    # roots = ['864691135594727723_000']
     
+    roots = ['864691135335038697_000', '864691135463333789_000', '864691134918370314_000']
+    # roots = ['864691135463333789_000']
+    
+    # roots = ['864691134918370314_000']
+    roots = ['864691135526594139_000']
+    roots = ['864691135441925448_000', '864691135462230941_000', '864691135469783890_000']
+    roots = ['864691135864976604_000']
+    roots = ['864691135594727723_000', '864691136075904648_000']
+
+
     #roots = ['864691135864976604_000']
     # print("roots len", len(roots))
     # roots = ['864691134940888163_000'] # where segclr missed some embeddings
@@ -830,69 +1233,97 @@ if __name__ == "__main__":
             # print("visualizing root")
             # visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], rank, box_cutoff, path)
             
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}.html'
+            # pres visual basic
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/found_before_pres/{root}_250.html'
             print("visualizing pres root")
             visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], rank, box_cutoff, path)
 
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/segclr_test/{root}_segclr.html'
             # visualize_segclr(vertices, edges, path)
             
+            # segclr map path
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/testing_colors/{root}_inputs.html'
 
-            # vertices = vertices.detach().cpu().numpy()
-            # edges = edges.detach().cpu().numpy()
-            # labels = labels.squeeze(-1).detach().cpu().numpy() # (original, )
-            # confidences = confidences.squeeze(-1).detach().cpu().numpy() # (original, )
-            # segclr_emb = segclr_emb.detach().cpu().numpy()
-            # has_segclr_emb = has_segclr_emb.squeeze(-1).detach().cpu().numpy()
-            # radius = radius.squeeze(-1).detach().cpu().numpy()
-            # rank = rank.squeeze(-1).detach().cpu().numpy()
-            # # print("segclr emb", segclr_emb)
-            # output = output.squeeze(-1).detach().cpu().numpy()
-            # pe = pe.detach().cpu().numpy()
+            vertices = vertices.detach().cpu().numpy()
+            edges = edges.detach().cpu().numpy()
+            labels = labels.squeeze(-1).detach().cpu().numpy() # (original, )
+            confidences = confidences.squeeze(-1).detach().cpu().numpy() # (original, )
+            segclr_emb = segclr_emb.detach().cpu().numpy()
+            has_segclr_emb = has_segclr_emb.squeeze(-1).detach().cpu().numpy()
+            radius = radius.squeeze(-1).detach().cpu().numpy()
+            rank = rank.squeeze(-1).detach().cpu().numpy()
+            # print("segclr emb", segclr_emb)
+            output = output.squeeze(-1).detach().cpu().numpy()
+            pe = pe.detach().cpu().numpy()
  
-            # # pe = (pe - pos_mean) / pos_std
-            # pe_pca = IncrementalPCA(n_components=3)
-            # pe_pca.fit(pe)
-            # pe_rgb = pe_pca.transform(pe)
-            # pe_max = pe_rgb.max(axis=0)
-            # pe_min = pe_rgb.min(axis=0)
-            # range_vals = pe_max - pe_min
-            # range_vals[range_vals == 0] = 1.0
-            # pe_scaled = (pe_rgb - pe_min) / range_vals
-            # pe_clipped = np.clip(pe_scaled, 0, 1)
-
-            # # segclr_emb = (segclr_emb - segclr_mean) / segclr_std
-            # ipca = IncrementalPCA(n_components=3)
-            # ipca.fit(segclr_emb)
-            # # print(segclr_rgb)
-
-            # segclr_rgb = ipca.transform(segclr_emb)
-            # root_max = segclr_rgb.max(axis=0)
-            # root_min = segclr_rgb.min(axis=0)
-            # # print("root max", root_max)
-            # # print("root min", root_min)
-            # range_vals = root_max - root_min
-            # range_vals[range_vals == 0] = 1.0
-            # segclr_scaled = (segclr_rgb - root_min) / range_vals
-            # segclr_clipped = np.clip(segclr_scaled, 0, 1)
-            # percentile_95 = np.percentile(segclr_rgb, 95, axis=0)
-            # percentile_5 = np.percentile(segclr_rgb, 5, axis=0)
+            # pe = (pe - pos_mean) / pos_std
+            pe_pca = IncrementalPCA(n_components=3)
+            pe_pca.fit(pe)
+            pe_rgb = pe_pca.transform(pe)
+            pe_max = pe_rgb.max(axis=0)
+            pe_min = pe_rgb.min(axis=0)
+            range_vals = pe_max - pe_min
+            range_vals[range_vals == 0] = 1.0
+            pe_scaled = (pe_rgb - pe_min) / range_vals
+            pe_clipped = np.clip(pe_scaled, 0, 1)
+            percentile_95 = np.percentile(pe_rgb, 95, axis=0)
+            percentile_5 = np.percentile(pe_rgb, 5, axis=0)
             
-            # # print("max 95", percentile_95)
-            # # print("min 5", percentile_5)
-            # range_vals = percentile_95 - percentile_5
-            # range_vals[range_vals == 0] = 1.0
-            # segclr_scaled_percentile = (segclr_rgb - percentile_5) / range_vals
-            # segclr_clipped_percentile = np.clip(segclr_scaled_percentile, 0, 1)
+            # print("max 95", percentile_95)
+            # print("min 5", percentile_5)
+            range_vals = percentile_95 - percentile_5
+            range_vals[range_vals == 0] = 1.0
+            pe_scaled_percentile = (pe_rgb - percentile_5) / range_vals
+            pe_clipped_percentile = np.clip(pe_scaled_percentile, 0, 1)
 
-            # # segclr_scaled = (segclr_rgb - scale_min) / range_vals
-            # # print(segclr_scaled)
-            # # print("segclr scaled", segclr_clipped)
-            # threshold = 0.05
-            # output_with_threshold = np.where(output > threshold, 1., 0.)
-            # print("visualizing inputs")
-            # visualize_pca_segclr(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped, output_with_threshold, box_cutoff,threshold,  path)
+            # segclr_emb = (segclr_emb - segclr_mean) / segclr_std
+            ipca = IncrementalPCA(n_components=3)
+            ipca.fit(segclr_emb)
+            # print(segclr_rgb)
+
+            segclr_rgb = ipca.transform(segclr_emb)
+            root_max = segclr_rgb.max(axis=0)
+            root_min = segclr_rgb.min(axis=0)
+            # print("root max", root_max)
+            # print("root min", root_min)
+            range_vals = root_max - root_min
+            range_vals[range_vals == 0] = 1.0
+            segclr_scaled = (segclr_rgb - root_min) / range_vals
+            segclr_clipped = np.clip(segclr_scaled, 0, 1)
+            percentile_95 = np.percentile(segclr_rgb, 95, axis=0)
+            percentile_5 = np.percentile(segclr_rgb, 5, axis=0)
+            
+            # print("max 95", percentile_95)
+            # print("min 5", percentile_5)
+            range_vals = percentile_95 - percentile_5
+            range_vals[range_vals == 0] = 1.0
+            segclr_scaled_percentile = (segclr_rgb - percentile_5) / range_vals
+            segclr_clipped_percentile = np.clip(segclr_scaled_percentile, 0, 1)
+
+            # segclr_scaled = (segclr_rgb - scale_min) / range_vals
+            # print(segclr_scaled)
+            # print("segclr scaled", segclr_clipped)
+            threshold = 0.05
+            output_with_threshold = np.where(output > threshold, 1., 0.)
+            print("visualizing inputs")
+
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/found_before_pres/{root}_labels.html'
+            visualize_labels_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_skel.html'
+            # visualize_skeleton_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_segclr.html'
+            # visualize_segclr_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_map.html'
+            # visualize_map_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_map_segclr.html'
+            # visualize_map_segclr_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_map_segclr_all.html'
+            # visualize_map_segclr_output_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
         # except Exception as e:
         #     print("Failed visualization for root id: ", root, "error: ", e)
         #     continue
