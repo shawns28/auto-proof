@@ -21,6 +21,7 @@ class AutoProofDataset(Dataset):
         self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
         self.split_dir = f'{self.roots_dir}{config['data']['split_dir']}'
         self.roots = data_utils.load_txt(f'{self.split_dir}{config['data'][f'{mode}_roots']}')
+        # self.roots = data_utils.load_txt(f'{self.split_dir}{mode}_conf_no_error_in_box_roots_og.txt')
         # num_elements = int(0.1 * len(self.roots))
         # random_indices = np.random.choice(len(self.roots), size=num_elements, replace=False)
         # self.roots = self.roots[random_indices]

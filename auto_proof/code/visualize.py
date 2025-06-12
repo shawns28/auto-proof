@@ -318,6 +318,7 @@ def visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist
             point_size=10,
             render_points_as_spheres=True,
             show_vertices=True,
+            clim=[0, 1],
             scalar_bar_args={'title': 'predictions'}  # Ensure scalar bar shows full [0,1] range
         )
 
@@ -1183,7 +1184,9 @@ if __name__ == "__main__":
     roots = ['864691135864976604_000']
     roots = ['864691135594727723_000', '864691136075904648_000']
 
-
+    roots = ['864691135187356435_000', '864691135726160447_000', '864691135726804031_000', '864691136010344486_000', '864691135323448476_000', '864691135367743481_000']
+    # roots = ['864691135635398115_000', '864691136313113917_000']
+    # roots = ['864691135635398115_000']
     #roots = ['864691135864976604_000']
     # print("roots len", len(roots))
     # roots = ['864691134940888163_000'] # where segclr missed some embeddings
@@ -1234,7 +1237,7 @@ if __name__ == "__main__":
             # visualize(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], rank, box_cutoff, path)
             
             # pres visual basic
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/found_before_pres/{root}_250.html'
+            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_250.html'
             print("visualizing pres root")
             visualize_pres(vertices, edges, labels, confidences, output, root_mesh, dist_to_error, max_dist, config['trainer']['show_tol'], rank, box_cutoff, path)
 
@@ -1244,71 +1247,71 @@ if __name__ == "__main__":
             # segclr map path
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/testing_colors/{root}_inputs.html'
 
-            vertices = vertices.detach().cpu().numpy()
-            edges = edges.detach().cpu().numpy()
-            labels = labels.squeeze(-1).detach().cpu().numpy() # (original, )
-            confidences = confidences.squeeze(-1).detach().cpu().numpy() # (original, )
-            segclr_emb = segclr_emb.detach().cpu().numpy()
-            has_segclr_emb = has_segclr_emb.squeeze(-1).detach().cpu().numpy()
-            radius = radius.squeeze(-1).detach().cpu().numpy()
-            rank = rank.squeeze(-1).detach().cpu().numpy()
-            # print("segclr emb", segclr_emb)
-            output = output.squeeze(-1).detach().cpu().numpy()
-            pe = pe.detach().cpu().numpy()
+            # vertices = vertices.detach().cpu().numpy()
+            # edges = edges.detach().cpu().numpy()
+            # labels = labels.squeeze(-1).detach().cpu().numpy() # (original, )
+            # confidences = confidences.squeeze(-1).detach().cpu().numpy() # (original, )
+            # segclr_emb = segclr_emb.detach().cpu().numpy()
+            # has_segclr_emb = has_segclr_emb.squeeze(-1).detach().cpu().numpy()
+            # radius = radius.squeeze(-1).detach().cpu().numpy()
+            # rank = rank.squeeze(-1).detach().cpu().numpy()
+            # # print("segclr emb", segclr_emb)
+            # output = output.squeeze(-1).detach().cpu().numpy()
+            # pe = pe.detach().cpu().numpy()
  
-            # pe = (pe - pos_mean) / pos_std
-            pe_pca = IncrementalPCA(n_components=3)
-            pe_pca.fit(pe)
-            pe_rgb = pe_pca.transform(pe)
-            pe_max = pe_rgb.max(axis=0)
-            pe_min = pe_rgb.min(axis=0)
-            range_vals = pe_max - pe_min
-            range_vals[range_vals == 0] = 1.0
-            pe_scaled = (pe_rgb - pe_min) / range_vals
-            pe_clipped = np.clip(pe_scaled, 0, 1)
-            percentile_95 = np.percentile(pe_rgb, 95, axis=0)
-            percentile_5 = np.percentile(pe_rgb, 5, axis=0)
+            # # pe = (pe - pos_mean) / pos_std
+            # pe_pca = IncrementalPCA(n_components=3)
+            # pe_pca.fit(pe)
+            # pe_rgb = pe_pca.transform(pe)
+            # pe_max = pe_rgb.max(axis=0)
+            # pe_min = pe_rgb.min(axis=0)
+            # range_vals = pe_max - pe_min
+            # range_vals[range_vals == 0] = 1.0
+            # pe_scaled = (pe_rgb - pe_min) / range_vals
+            # pe_clipped = np.clip(pe_scaled, 0, 1)
+            # percentile_95 = np.percentile(pe_rgb, 95, axis=0)
+            # percentile_5 = np.percentile(pe_rgb, 5, axis=0)
             
-            # print("max 95", percentile_95)
-            # print("min 5", percentile_5)
-            range_vals = percentile_95 - percentile_5
-            range_vals[range_vals == 0] = 1.0
-            pe_scaled_percentile = (pe_rgb - percentile_5) / range_vals
-            pe_clipped_percentile = np.clip(pe_scaled_percentile, 0, 1)
+            # # print("max 95", percentile_95)
+            # # print("min 5", percentile_5)
+            # range_vals = percentile_95 - percentile_5
+            # range_vals[range_vals == 0] = 1.0
+            # pe_scaled_percentile = (pe_rgb - percentile_5) / range_vals
+            # pe_clipped_percentile = np.clip(pe_scaled_percentile, 0, 1)
 
-            # segclr_emb = (segclr_emb - segclr_mean) / segclr_std
-            ipca = IncrementalPCA(n_components=3)
-            ipca.fit(segclr_emb)
-            # print(segclr_rgb)
+            # # segclr_emb = (segclr_emb - segclr_mean) / segclr_std
+            # ipca = IncrementalPCA(n_components=3)
+            # ipca.fit(segclr_emb)
+            # # print(segclr_rgb)
 
-            segclr_rgb = ipca.transform(segclr_emb)
-            root_max = segclr_rgb.max(axis=0)
-            root_min = segclr_rgb.min(axis=0)
-            # print("root max", root_max)
-            # print("root min", root_min)
-            range_vals = root_max - root_min
-            range_vals[range_vals == 0] = 1.0
-            segclr_scaled = (segclr_rgb - root_min) / range_vals
-            segclr_clipped = np.clip(segclr_scaled, 0, 1)
-            percentile_95 = np.percentile(segclr_rgb, 95, axis=0)
-            percentile_5 = np.percentile(segclr_rgb, 5, axis=0)
+            # segclr_rgb = ipca.transform(segclr_emb)
+            # root_max = segclr_rgb.max(axis=0)
+            # root_min = segclr_rgb.min(axis=0)
+            # # print("root max", root_max)
+            # # print("root min", root_min)
+            # range_vals = root_max - root_min
+            # range_vals[range_vals == 0] = 1.0
+            # segclr_scaled = (segclr_rgb - root_min) / range_vals
+            # segclr_clipped = np.clip(segclr_scaled, 0, 1)
+            # percentile_95 = np.percentile(segclr_rgb, 95, axis=0)
+            # percentile_5 = np.percentile(segclr_rgb, 5, axis=0)
             
-            # print("max 95", percentile_95)
-            # print("min 5", percentile_5)
-            range_vals = percentile_95 - percentile_5
-            range_vals[range_vals == 0] = 1.0
-            segclr_scaled_percentile = (segclr_rgb - percentile_5) / range_vals
-            segclr_clipped_percentile = np.clip(segclr_scaled_percentile, 0, 1)
+            # # print("max 95", percentile_95)
+            # # print("min 5", percentile_5)
+            # range_vals = percentile_95 - percentile_5
+            # range_vals[range_vals == 0] = 1.0
+            # segclr_scaled_percentile = (segclr_rgb - percentile_5) / range_vals
+            # segclr_clipped_percentile = np.clip(segclr_scaled_percentile, 0, 1)
 
-            # segclr_scaled = (segclr_rgb - scale_min) / range_vals
-            # print(segclr_scaled)
-            # print("segclr scaled", segclr_clipped)
-            threshold = 0.05
-            output_with_threshold = np.where(output > threshold, 1., 0.)
-            print("visualizing inputs")
+            # # segclr_scaled = (segclr_rgb - scale_min) / range_vals
+            # # print(segclr_scaled)
+            # # print("segclr scaled", segclr_clipped)
+            # threshold = 0.05
+            # output_with_threshold = np.where(output > threshold, 1., 0.)
+            # print("visualizing inputs")
 
-            path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/found_before_pres/{root}_labels.html'
-            visualize_labels_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
+            # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/found_before_pres/{root}_labels.html'
+            # visualize_labels_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)
 
             # path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/before_pres/{root}_skel.html'
             # visualize_skeleton_pres(vertices, edges, labels, confidences, root_mesh, segclr_clipped_percentile, has_segclr_emb, radius, output, rank, pe_clipped_percentile, box_cutoff, threshold, path)

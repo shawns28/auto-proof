@@ -37,14 +37,14 @@ class ObjectDetectionDataset(Dataset):
             for cloud_ratio in self.obj_det_error_cloud_ratios:
                 self.threshold_to_metrics[f'{threshold}_{cloud_ratio}'] = self.manager.dict({
                     'conf_tp': 0,
-                    'conf_fn': 0, 
-                    'conf_fp': 0, 
+                    'conf_fn': 0,
+                    'conf_fp': 0,
                 })
         for degree in self.branch_degrees:
             self.threshold_to_metrics[degree] = self.manager.dict({
                 'conf_tp': 0,
-                'conf_fn': 0, 
-                'conf_fp': 0, 
+                'conf_fn': 0,
+                'conf_fp': 0,
             })
 
     def __len__(self):
@@ -61,12 +61,12 @@ class ObjectDetectionDataset(Dataset):
         try:
             with h5py.File(feature_path, 'r') as feat_f, h5py.File(labels_path, 'r') as labels_f:
                 labels = labels_f['labels'][:]
-                if len(labels) < 20:
-                    return '', False, False
                 confidences = labels_f['confidences'][:]
 
-                rank = feat_f['rank'][:]
+                if len(labels) < 20:
+                    return root, False, False, True
 
+                rank = feat_f['rank'][:]
                 edges = feat_f['edges'][:]
 
                 box_cutoff_nodes = rank < self.box_cutoff
@@ -81,6 +81,13 @@ class ObjectDetectionDataset(Dataset):
                 confidences = confidences.astype(bool)
                 assert(len(labels) == len(output))
 
+                # Calculate number of confident nodes within box cutoff
+                num_confident_in_box_cutoff = np.sum(confidences[box_cutoff_nodes])
+                num_errors = np.sum(labels)
+
+                if num_confident_in_box_cutoff < 10 * num_errors:
+                    return root, False, False, True
+
                 # Might need to change this, not sure
                 threshold_to_output = {}
                 for threshold in self.thresholds:
@@ -88,18 +95,17 @@ class ObjectDetectionDataset(Dataset):
 
                 g = nx.Graph()
                 g.add_nodes_from(range(len(labels)))
-                g.add_edges_from(edges)
+                if len(edges) > 0: # Ensure edges exist before adding
+                    g.add_edges_from(edges)
 
                 degree_to_output = {}
                 node_degrees = g.degree()
                 node_degrees = np.array([degree for _, degree in node_degrees])
-                # print("node degrees", node_degrees)
                 for degree in self.branch_degrees:
                     degree_to_output[degree] = np.where(node_degrees >= degree, True, False)
-                # print("degree_to_output", degree_to_output)
 
                 label_ccs = get_label_components(g, labels, box_cutoff_nodes)
-                
+
                 label_ccs, confidences = remove_isolated_errors(g, label_ccs, confidences)
                 missed_error = False
                 found_error = False
@@ -120,33 +126,23 @@ class ObjectDetectionDataset(Dataset):
                         elif (threshold == 0.05 and cloud_ratio == 0.1) and conf_tp > 0:
                             found_error = True
 
-                        # For no segclr
-                        # if (threshold == 0.1 and cloud_ratio == 0.1) and conf_fn > 0:
-                        #     missed_error = True
-                        # elif (threshold == 0.1 and cloud_ratio == 0.1) and conf_tp > 0:
-                        #     found_error = True
-
-                        # For including everything in core
-                        # if (threshold == 0.05 and cloud_ratio == 0.1) and conf_fn > 0:
-                        #     missed_error = True
-                        # elif (threshold == 0.05 and cloud_ratio == 0.1) and conf_tp > 0:
-                        #     found_error = True
                 for degree in self.branch_degrees:
                     degree_ccs = get_output_components(g, degree_to_output[degree], confidences, box_cutoff_nodes)
                     conf_tp, conf_fn = count_shared_and_unshared(label_ccs, degree_ccs)
                     _, conf_fp = count_shared_and_unshared(degree_ccs, label_ccs)
                     self.threshold_to_metrics[degree]['conf_tp'] += conf_tp
                     self.threshold_to_metrics[degree]['conf_fn'] += conf_fn
-                    self.threshold_to_metrics[degree]['conf_fp'] += conf_fp                  
-                
-                return root, missed_error, found_error
+                    self.threshold_to_metrics[degree]['conf_fp'] += conf_fp
+
+                return root, missed_error, found_error, False
         except Exception as e:
             print("root: ", root, "error: ", e)
-            return None, False, False
-            
-        return '', False, False 
+            # If an error occurs, consider it "ignored" for the purpose of the metrics
+            return root, False, False, False
 
-# If any error locations are isolated with no confident non errors nearby 
+        return '', False, False, False
+
+# If any error locations are isolated with no confident non errors nearby
 # then remove from label cc list and mark them as unconfident so they get ignored in output prediction
 def remove_isolated_errors(graph, label_ccs, confidences):
     new_label_ccs = []
@@ -194,8 +190,8 @@ def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio):
                 count += 1
         ratio = count / total
         if ratio >= obj_det_error_cloud_ratio:
-            new_output_ccs.append(cc) 
-        elif ratio == 0:    
+            new_output_ccs.append(cc)
+        elif ratio == 0:
             fp += 1
         else: # ratio between 0 and cloud_ratio, not specific enough cloud
             fn += 1
@@ -211,7 +207,7 @@ def count_shared_and_unshared(list_of_sets1, list_of_sets2):
                 not_shared = False
                 shared += 1
                 break
-        
+
         if not_shared:
             unshared += 1
     return shared, unshared
@@ -395,15 +391,15 @@ if __name__ == "__main__":
     run_id = 'AUT-301'
     run_id = 'AUT-322'
     run_id = 'AUT-330' # baseline
-    # run_id = 'AUT-331' # no segclr
+    run_id = 'AUT-331' # no segclr
     run_dir = f'{ckpt_dir}{run_id}/'
-    # epoch = 40
-    epoch = 60
+    epoch = 40
+    # epoch = 60
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
     # config = data_utils.get_config('base')
-    if run_id == 'AUT-330':
+    if run_id == 'AUT-330' or run_id == 'AUT-331':
         config['data']['labels_dir'] = "labels_at_1300_ignore_inbetween/"
     
     model = create_model(config)
@@ -429,7 +425,7 @@ if __name__ == "__main__":
     config['data']['val_roots'] = "val_roots_og.txt"
     config['data']['test_roots'] = "test_roots_og.txt"
 
-    mode = 'train'
+    mode = 'test'
     data = AutoProofDataset(config, mode)
     # config['loader']['batch_size'] = 32
     # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
@@ -457,8 +453,11 @@ if __name__ == "__main__":
 
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
         # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
-        obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/train_conf_no_error_in_box_roots_og.txt"))
-
+        obj_det_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/test_conf_no_error_in_box_roots_og.txt")
+        # num_roots_to_sample = int(len(obj_det_roots) * 0.10)
+        # sampled_indices = np.random.choice(len(obj_det_roots), size=num_roots_to_sample, replace=False)
+        # obj_det_roots = set(obj_det_roots[sampled_indices])
+        
         with tqdm(total=len(data) / config['loader']['batch_size'], desc=mode) as pbar:
             for i, data in enumerate(data_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
@@ -490,15 +489,18 @@ if __name__ == "__main__":
         start_time = time.time()
         missed_roots = []
         found_roots = []
+        ignored_roots = []
         other_roots = []
         with tqdm(total=(len(obj_det_data) / config['loader']['batch_size']), desc="obj det all") as pbar:
             for i, data in enumerate(obj_det_loader):
-                roots, missed, found = data
+                roots, missed, found, ignored = data
                 for i, root in enumerate(roots):
                     if missed[i]:
                         missed_roots.append(root)
                     elif found[i]:
                         found_roots.append(root)
+                    elif ignored[i]:
+                        ignored_roots.append(root)
                     else:
                         other_roots.append(root)
                 
@@ -510,7 +512,9 @@ if __name__ == "__main__":
         data_utils.save_txt(f"{save_dir}missed.txt", missed_roots)
         data_utils.save_txt(f"{save_dir}found.txt", found_roots)
         data_utils.save_txt(f"{save_dir}other.txt", other_roots)
+        data_utils.save_txt(f"{save_dir}ignored.txt", ignored_roots)
         metrics_dict = obj_det_data.__getmetrics__()
+        
         
         # branch model
         cloud_ratio = 0.1
@@ -519,6 +523,7 @@ if __name__ == "__main__":
         # for cloud_ratio in config['trainer']['obj_det_error_cloud_ratios']:
         save_path = obj_det_plot(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
         save_path = obj_det_plot_legend(metrics_dict, config['trainer']['thresholds'], epoch, save_dir, cloud_ratio, config['data']['box_cutoff'], config['trainer']['branch_degrees'])
+
 
         print("metrics at threshold 0.01", obj_det_data.__getmetrics__()["0.01_0.2"])
         print("metrics at threshold 0.4", obj_det_data.__getmetrics__()["0.4_0.2"])
