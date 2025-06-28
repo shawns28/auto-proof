@@ -251,13 +251,13 @@ def main():
         print("Loading cc_root_group_list")
         cc_root_group_list = data_utils.load_pickle_dict(cc_root_group_list_path)
 
-    cc_root_group_list.sort(key=len, reverse=True)
-    count = 0
-    for cc_group in cc_root_group_list:
-        print("size", len(cc_group))
-        count += 1
-        if count == 10:
-            break
+    # cc_root_group_list.sort(key=len, reverse=True)
+    # count = 0
+    # for cc_group in cc_root_group_list:
+    #     print("size", len(cc_group))
+    #     count += 1
+    #     if count == 10:
+    #         break
 
     proofread_mat_version1 = data_config['proofread']['mat_versions'][0]
     proofread_mat_version2 = data_config['proofread']['mat_versions'][1]
@@ -267,15 +267,15 @@ def main():
 
     # TODO: REMEMBER TO CHANGE THE DIR if doing the special stuff
     split_dicts_dir = f'{roots_dir}{data_config['split']['split_dir']}{len(roots)}/'
-    val_roots_path = f'{split_dicts_dir}val_roots_og.txt'
-    print("val_roots_path", val_roots_path)
-    train_roots_path = f'{split_dicts_dir}train_roots_og.txt'
-    test_roots_path = f'{split_dicts_dir}test_roots_og.txt'
+    val_roots_path = f'{split_dicts_dir}val_roots_hi.txt'
+    train_roots_path = f'{split_dicts_dir}train_roots_hi.txt'
+    test_roots_path = f'{split_dicts_dir}test_roots_hi.txt'
     if not (os.path.exists(val_roots_path) and os.path.exists(train_roots_path)):
         print("Creating split")
-        data_utils.save_txt(f'{split_dicts_dir}all_roots.txt', roots)
+        data_utils.save_txt(f'{split_dicts_dir}all_roots_hi.txt', roots)
         start_time = time.time()
-        train_roots, val_roots, test_roots = create_split(no_error_in_box_dict, cc_root_group_list, proofread_roots, split, split_dicts_dir)
+        default = True
+        train_roots, val_roots, test_roots = create_split(no_error_in_box_dict, cc_root_group_list, proofread_roots, split, split_dicts_dir, default)
         end_time = time.time()
         print("Creating split took", end_time - start_time)
         
@@ -288,9 +288,9 @@ def main():
         test_roots = data_utils.load_txt(test_roots_path)
     
     # TODO: Remake the actual create conf roots
-    val_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}val_conf_no_error_in_box_roots_og.txt'
-    train_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}train_conf_no_error_in_box_roots_og.txt'
-    test_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}test_conf_no_error_in_box_roots_og.txt'
+    val_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}val_conf_no_error_in_box_roots_hi.txt'
+    train_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}train_conf_no_error_in_box_roots_hi.txt'
+    test_conf_no_error_in_box_roots_list_path = f'{split_dicts_dir}test_conf_no_error_in_box_roots_hi.txt'
     if not (os.path.exists(val_conf_no_error_in_box_roots_list_path) and os.path.exists(train_conf_no_error_in_box_roots_list_path)):
         print("Creating val_conf_no_error_in_box_roots")
         create_conf_no_error_in_box_roots_list(no_error_in_box_dict, val_roots, val_conf_no_error_in_box_roots_list_path)
@@ -374,28 +374,37 @@ def create_cc_root_group_list(cc_to_root_group, cc_root_group_list_path):
     data_utils.save_pickle_dict(cc_root_group_list_path, cc_root_group_list)
     return cc_root_group_list
 
-def create_split(no_error_in_box_dict, cc_root_group_list, proofread_roots, split, split_dir):    
+def create_split(no_error_in_box_dict, cc_root_group_list, proofread_roots, split, split_dir, default):    
     # def count_shared_elements(cc_root_group):
     #     return np.intersect1d(proofread_roots, np.array(cc_root_group)).size
     # root_list = sorted(cc_root_group_list, key=count_shared_elements, reverse=True)
-    root_list = sorted(
+    
+    if default:
+        root_list = sorted(
         cc_root_group_list,
-        key=lambda sublist: sum(1 for root in sublist if no_error_in_box_dict.get(root, False)),
-        # Use .get(root, False) for robustness if 'root' might not be in the dictionary.
-        # If you are absolutely sure 'root' will always be a key, you can use:
-        # key=lambda sublist: sum(1 for root in sublist if no_error_in_box_dict[root]),
-        # Add reverse=True if you want to sort by descending count (more Trues first)
-        # reverse=True
-    )
+        key=lambda sublist: np.intersect1d(proofread_roots, np.array(sublist)).size,
+        reverse=True # Added to sort by descending count (more proofread roots first)
+    ) 
+    else:
+        # The new version that I should make into a flag or mention in the docs and remove
+        root_list = sorted(
+            cc_root_group_list,
+            key=lambda sublist: sum(1 for root in sublist if no_error_in_box_dict.get(root, False)),
+            # Use .get(root, False) for robustness if 'root' might not be in the dictionary.
+            # If you are absolutely sure 'root' will always be a key, you can use:
+            # key=lambda sublist: sum(1 for root in sublist if no_error_in_box_dict[root]),
+            # Add reverse=True if you want to sort by descending count (more Trues first)
+            # reverse=True
+        )
 
     # conf_count_list = [count_true_in_sublist(sub_roots, no_error_in_box_dict) for sub_roots in root_list]
-    mini_count = 0
-    for sub_roots in cc_root_group_list:
-        print("len of sub roots", len(sub_roots))
-        print("number of conf", sum(1 for root in sub_roots if no_error_in_box_dict.get(root, False)))
-        mini_count += 1
-        if mini_count == 50:
-            break
+    # mini_count = 0
+    # for sub_roots in cc_root_group_list:
+    #     print("len of sub roots", len(sub_roots))
+    #     print("number of conf", sum(1 for root in sub_roots if no_error_in_box_dict.get(root, False)))
+    #     mini_count += 1
+    #     if mini_count == 50:
+    #         break
 
     size_list = [len(arr) for arr in root_list]
     proofread_count_list = [np.intersect1d(proofread_roots, np.array(cc_root_group)).size for cc_root_group in root_list]
@@ -461,9 +470,9 @@ def create_split(no_error_in_box_dict, cc_root_group_list, proofread_roots, spli
 
     print(np.intersect1d(np.array(proofread_roots), np.array(split_roots[0])).size)
 
-    data_utils.save_txt(f'{split_dir}train_roots.txt', split_roots[0])
-    data_utils.save_txt(f'{split_dir}val_roots.txt', split_roots[1])
-    data_utils.save_txt(f'{split_dir}test_roots.txt', split_roots[2])
+    data_utils.save_txt(f'{split_dir}train_roots_hi.txt', split_roots[0])
+    data_utils.save_txt(f'{split_dir}val_roots_hi.txt', split_roots[1])
+    data_utils.save_txt(f'{split_dir}test_roots_hi.txt', split_roots[2])
     with open(f'{split_dir}split_metadata', 'w') as meta_f:
         meta_f.write(f'train_{sum_size_proportions[0]}_{sum_proofread_proportions[0]}\n')
         meta_f.write(f'val_{sum_size_proportions[1]}_{sum_proofread_proportions[1]}\n')
