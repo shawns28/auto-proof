@@ -2,74 +2,97 @@ from auto_proof.code.pre import data_utils
 
 import numpy as np
 import networkx as nx
-# import graph_tool.all as gt
 import torch
 import glob
+from typing import Any, Tuple # Import Any for generic types
 
-def map_pe_wrapper(pos_enc_dim, edges, num_vertices):
-    """Creates Maximal Axis Projection (MAP) Positional Encodings
+def map_pe_wrapper(pos_enc_dim: int, edges: np.ndarray, num_vertices: int) -> Tuple[bool, Any, np.ndarray]:
+    """Creates Maximal Axis Projection (MAP) Positional Encodings.
 
-    Copied from, make sure to cite:
+    This is a wrapper function to handle the creation of a NetworkX graph from
+    edges and vertices, and then compute the MAP positional encoding. It
+    includes error handling for robustness.
+
+    Core logic from:
     https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
+
+    Args:
+        pos_enc_dim: The desired dimension of the positional encoding.
+        edges: A NumPy array of shape (N, 2) representing the graph edges.
+        num_vertices: The total number of vertices in the graph.
+
+    Returns:
+        A tuple:
+        - bool: True if MAP PE was successfully computed, False otherwise.
+        - Any: An Exception object if an error occurred, None otherwise.
+        - np.ndarray: The computed MAP positional encoding as a NumPy array,
+                      or None if computation failed.
     """
     try:
         g = nx.Graph()
         g.add_nodes_from(range(num_vertices))
+        # Ensure edges are valid (e.g., not empty and contain valid indices)
+        if edges.size > 0:
+            g.add_edges_from(edges)
+        
+        # Parameters for map_positional_encoding are set to True for all ambiguity resolutions
+        map_pe = map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True, pos_enc_dim=pos_enc_dim)
+        return True, None, map_pe.numpy()
+            
+    except Exception as e:
+        # Catch any exception during graph creation or PE computation
+        return False, e, None
+    try:
+        g = nx.Graph()
+        g.add_nodes_from(range(num_vertices))
         g.add_edges_from(edges)
-        # print("nodes order nx", g.nodes())
-        # g = gt.Graph(edges, directed=False)
-        # print("nodes order gt", list(g.vertices()))
         map_pe = map_positional_encoding(g, True, True, True, pos_enc_dim)
         return True, None, map_pe.numpy()
             
     except Exception as e:
         return False, e, None
 
-# There are different versions of the normalized adjency matrix that I could use
 def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True, pos_enc_dim=32):
-    """Creates Maximal Axis Projection (MAP) Positional Encodings
+    """Creates Maximal Axis Projection (MAP) Positional Encodings.
 
-    Copied from, make sure to cite:
+    This function computes Maximal Axis Projection (MAP) Positional Encodings
+    for a given graph. It involves constructing and normalizing the adjacency matrix,
+    computing its eigenvectors and eigenvalues, and applying various transformations
+    to ensure uniqueness and desired properties of the positional encoding.
+
+    Core logic from:
     https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
+
+    Args:
+        g: A NetworkX graph object.
+        use_unique_sign: If True, resolves sign ambiguity of eigenvectors.
+        use_unique_basis: If True, resolves basis ambiguity for repeated eigenvalues.
+        use_eig_val: If True, scales eigenvectors by the square root of eigenvalues.
+        pos_enc_dim: The desired dimension (k) of the positional encoding.
+
+    Returns:
+        torch.Tensor: A tensor of shape [n, pos_enc_dim] representing the
+                      MAP positional encoding for the graph, where n is the number of nodes.
     """
-    # A = gt.adjacency(g).astype(np.double)
     A = nx.adjacency_matrix(g).astype(np.double)
     A = torch.from_numpy(A.toarray()).double()
-    # print("A", A)
+
     A = normalize_adjacency(A)
-    # print("A normalized", A)
-    # A = np.array([[0, 1, 0, 1],
-    #               [1, 0, 1, 0],
-    #               [0, 1, 0, 1],
-    #               [1, 0, 1, 0]]).astype(np.double)
-    # A = gt.laplacian(g, norm=True)
-    # A = torch.from_numpy(A.toarray()).double()
-    # print("A normalized", A)
+
     n, k = A.shape[0], pos_enc_dim
     E, U = torch.linalg.eigh(A)
     E = E.round(decimals=14)
-    # print("E", E)
-    # print("U", U)
+
     dim = min(n, k)
-    # If I reverse I have to do it here also
     _, mult = torch.unique(E[-dim:], return_counts=True)
-    # print("mult", mult)
     ind = torch.cat([torch.LongTensor([0]), torch.cumsum(mult, dim=0)])
     
-    # If freq == 'high'
     ind += max(n - k, 0)
-    # To do the freq low thing we need to do more stuff
-    # if freq == 'low':
-    #     ind += 1
-    # print("ind", ind)
     if use_unique_sign:
-        # print("entering use_unique_sign")
         for i in range(mult.shape[0]):
             if mult[i] == 1:
                 U[:, ind[i]:ind[i + 1]] = unique_sign(U[:, ind[i]:ind[i + 1]])  # eliminate sign ambiguity
-    # print("U after sign", U)
     if use_unique_basis:
-        # print("entering use_unique_basis")
         for i in range(mult.shape[0]):
             if mult[i] == 1:
                 continue  # single eigenvector, no basis ambiguity
@@ -77,37 +100,27 @@ def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_
                 U[:, ind[i]:ind[i + 1]] = unique_basis(U[:, ind[i]:ind[i + 1]])  # eliminate basis ambiguity
             except AssertionError:
                 continue  # assumption violated, skip
-    # print("U after basis", U)
     if use_eig_val:
         Lambda = torch.nn.ReLU()(torch.diag(E))
         U = U @ torch.sqrt(Lambda)
-    # print("U after eig val", U)
     if n < k:
         zeros = torch.zeros([n, k - n])
         U = torch.cat([U, zeros], dim=-1)
-    # print("U at the end", U)
-    # print("U shape before taking last k eigenvectors", U.shape)
-    # if freq == 'high':
-        # print('high')
-    pos_enc = U[:, -k:]  # last k eigenvectors
-    # elif freq == 'low':
-    #     print('low')
-    #     pos_enc = U[:, 1:k+1] # first k eigenvectors except first
-    # else: # freq == 'mix'
-    #     print('mix')
-    #     pos_enc = torch.cat(U[:, 1: (k // 2) + 1], U[:, -(k // 2):])
-    # Make sure that the dim stuff is the same since we're using gt instead of networkx
-    # Can run it with a root thats smaller than 32
-    # verify that pos_enc is the smallest eigenvectors
+    pos_enc = U[:, -k:]
     return pos_enc
 
-# There are different versions of the normalized adjency matrix that I could use
-# Normalized Laplacian, Normalized Adjacency, Normalized Adjacency with pre self loop/post self loop
-# Currenty this does the normalized adjacency with post self loop like in
 def normalize_adjacency(A):
-    """Normalize adjacency matrix
+    """Normalizes the adjacency matrix using symmetric normalization ($D^{-1/2} A D^{-1/2} + I$).
 
-    https://github.com/PKU-ML/LaplacianCanonization/blob/4f40a2236707fb6f604aede8c3a8f12813c7db92/data/map.py#L91
+    This normalization is commonly used in Graph Neural Networks. It first
+    computes the inverse square root of the degree matrix and then applies
+    it to the adjacency matrix. Finally, the identity matrix is added.
+
+    Args:
+        A: A square adjacency matrix as a torch.Tensor.
+
+    Returns:
+        torch.Tensor: The symmetrically normalized adjacency matrix.
     """
     n = A.shape[0]
     assert list(A.shape) == [n, n]
@@ -182,7 +195,6 @@ def unique_basis(U_i):
     Return:
         Tensor of shape [n, d].
     """
-    # print("Entering unique basis")
     n, d = U_i.shape
     E = torch.eye(n)
     J = torch.ones(n)
@@ -205,7 +217,6 @@ def unique_basis(U_i):
     U_0 = torch.zeros([n, d])  # the unique basis
     u_span = torch.empty([n, 0])  # span(u_1, ..., u_{i-1})
     u_perp = U_i.clone()  # orthogonal complementary space
-    # print("d is equal to", d)
     for i in range(d):
         P_perp = u_perp @ u_perp.T
         u_i = P_perp @ X[i]

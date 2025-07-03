@@ -16,6 +16,7 @@ def test():
     data_dir = data_config['data_dir']
     roots_dir = f'{data_config['data_dir']}roots_{343}_{1300}/'
     latest_version = data_config['labels']['latest_mat_version']
+    # TODO: add label type
     labels_at_latest_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{latest_version}/'
     roots_at_latest_dir = f'{data_dir}{data_config['labels']['roots_at_latest_dir']}{latest_version}/'
 

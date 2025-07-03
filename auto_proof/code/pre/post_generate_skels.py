@@ -1,6 +1,4 @@
 from auto_proof.code.pre import data_utils
-from auto_proof.code.pre.skeletonize import get_skel, process_skel
-from auto_proof.code.pre.map_pe import map_pe_wrapper
 
 import os
 import numpy as np
@@ -11,9 +9,20 @@ import glob
 import time
 
 def main():
-    """
-        TODO: Fill in
-        TODO: Assuming that roots passed in already includes the proofread root list, add this logic to process raw edits
+    """Verifies the existence of generated skeletons and updates the root list.
+
+    It assumes that the input 'post_proofread_roots' file
+    already contains the combined list of initial raw edit roots and proofread roots
+    with their unique identifiers.
+
+    This function performs the following steps:
+    1. Chunks the roots and queries the CAVE client to check if skeletons for
+       these roots (without identifiers) exist in the cache for the specified
+       skeleton version and datastack.
+    2. Creates a boolean mask based on the existence check.
+    3. Filters the original list of roots (with identifiers) to retain only
+       those for which skeletons exist.
+    4. Saves the filtered list of roots to a text file for subsequent steps.
     """
     data_config = data_utils.get_config('data')
     client_config = data_utils.get_config('client')
@@ -23,49 +32,59 @@ def main():
 
     roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
     dicts_dir = f'{data_dir}dicts_{mat_version_start}_{mat_version_end}/'
-    features_dir = f'{data_dir}{data_config['features']['features_dir']}'
-    if not os.path.exists(features_dir):
-        os.makedirs(features_dir)
 
-    # TODO: Change after using   
-    #TODO: Should be able to load in all of the roots due to the check below and also checking if a root exists in the cache
-    # roots = data_utils.load_txt(f'{roots_dir}{data_config['proofread']['post_proofread_roots']}')
-    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt")
-    # roots = data_utils.load_txt(f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{data_config['proofread']['post_proofread_roots']}')
-    # roots = ['864691135155575396_000'] # non proofread
-    # roots = ['864691135865167998_000'] # proofread
-    # roots = ['864691135155575396_000', '864691135865167998_000']
-
-    # proofread_roots = data_utils.load_txt(data_config['raw_edits']['proofread_roots'])
-
-    # TODO: Move this code to a separate file since it should only be ran once and then this file should always just load in post generate roots so that the chunks match up correctly
-    post_generate_roots_path = f'{roots_dir}{data_config['features']['post_generate_roots']}'
-    # post_generate_roots_path = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt"
+    roots_file_path = f'{roots_dir}{data_config['proofread']['post_proofread_roots']}'
     
-    print("roots original len", len(roots))
-    files = glob.glob(f'{features_dir}*')
-    already_featurized_roots = [files[i][-27:-5] for i in range(len(files))]
-    roots = np.setdiff1d(roots, already_featurized_roots)
-    print("roots after removing already featurized len", len(roots))
+    roots = data_utils.load_txt(roots_file_path)
+    print(f"Loaded {len(roots)} roots for existence check.")
 
-    exist_chunk_size = data_config['features']['exists_chunk_size']
+    post_generate_roots_path = f'{roots_dir}{data_config['generate_skels']['post_generate_roots']}'
+
+    skeleton_version = data_config['features']['skeleton_version']
+
+    exist_chunk_size = data_config['generate_skels']['exists_chunk_size']
     exists_chunks = [roots[i:i + exist_chunk_size] for i in range(0, len(roots), exist_chunk_size)]
-    exists_chunks_without_ident = [[int(root[:-4]) for root in chunk] for chunk in exists_chunks]
-    # TODO: Save this as post_generate_roots
+    
+    # Convert roots with identifiers (e.g., '123_000') to bare root IDs (e.g., 123)
+    # as expected by client.skeleton.skeletons_exist
+    exists_chunks_without_ident = [[int(root.split('_')[0]) for root in chunk] for chunk in exists_chunks]
+    
+    print(f"Divided roots into {len(exists_chunks_without_ident)} chunks for existence check.")
+
     chunk_masks = []
-    with tqdm(total=len(exists_chunks_without_ident)) as pbar:
+    print("Checking skeleton existence in cache...")
+    with tqdm(total=len(exists_chunks_without_ident), desc="Checking skeleton existence") as pbar:
         for chunk_without_ident in exists_chunks_without_ident: 
-            chunk_in_cache = client.skeleton.skeletons_exist(root_ids=chunk_without_ident, datastack_name=datastack_name, skeleton_version=skeleton_version)
-            chunk_mask = [True if chunk_in_cache[root_id_without_ident] else False for root_id_without_ident in chunk_without_ident]
+            # Query the CAVE client to check if skeletons exist for the given root IDs
+            chunk_in_cache = client.skeleton.skeletons_exist(
+                root_ids=chunk_without_ident, 
+                datastack_name=datastack_name, 
+                skeleton_version=skeleton_version
+            )
+            # Create a boolean mask: True if skeleton exists, False otherwise
+            chunk_mask = [True if chunk_in_cache.get(root_id_without_ident) else False for root_id_without_ident in chunk_without_ident]
             chunk_masks.append(chunk_mask)
             pbar.update()
-    chunk_masks = sum(chunk_masks, [])
-    print(chunk_masks[0])
-    print("chunk flattened len", len(chunk_masks))
-    print("roots len", len(roots))
-    roots = roots[chunk_masks]
-    data_utils.save_txt(f'{roots_dir}{data_config['features']['post_generate_roots']}', roots)
+    
+    # Flatten the list of masks into a single boolean array
+    flat_chunk_masks = sum(chunk_masks, [])
+    
+    # Convert the list of roots to a NumPy array to enable boolean indexing
+    roots_np = np.array(roots)
+
+    # Filter the original roots (with identifiers) using the flattened mask
+    roots_with_skeletons = roots_np[flat_chunk_masks].tolist()
+    
+    print(f"Original roots count: {len(roots)}")
+    print(f"Roots with existing skeletons count: {len(roots_with_skeletons)}")
+    
+    # Save the filtered list of roots (only those for which skeletons exist)
+    data_utils.save_txt(post_generate_roots_path, roots_with_skeletons)
+    print(f"Saved roots with existing skeletons to: {post_generate_roots_path}")
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    elapsed_time = end_time - start_time # Calculate elapsed time
+    print(f"\nProcess completed in {elapsed_time:.2f} seconds.")

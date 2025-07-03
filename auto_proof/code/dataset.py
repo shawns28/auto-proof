@@ -21,10 +21,6 @@ class AutoProofDataset(Dataset):
         self.roots_dir = f'{self.data_dir}roots_{mat_version_start}_{mat_version_end}/'
         self.split_dir = f'{self.roots_dir}{config['data']['split_dir']}'
         self.roots = data_utils.load_txt(f'{self.split_dir}{config['data'][f'{mode}_roots']}')
-        # self.roots = data_utils.load_txt(f'{self.split_dir}{mode}_conf_no_error_in_box_roots_og.txt')
-        # num_elements = int(0.1 * len(self.roots))
-        # random_indices = np.random.choice(len(self.roots), size=num_elements, replace=False)
-        # self.roots = self.roots[random_indices]
         self.labels_dir = f'{self.data_dir}{config['data']['labels_dir']}'
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
         self.segclr_dir = f'{self.data_dir}{config['data']['segclr_dir']}'
@@ -57,7 +53,6 @@ class AutoProofDataset(Dataset):
         random_index = np.random.randint(0, len(self.roots))
         return self.roots[random_index]
     
-    # TODO: Change how this works because it won't work anymore
     def get_is_proofread(self, root):
         root_without_ident = root[:-4]
         return root_without_ident in self.proofread_roots        
@@ -133,12 +128,6 @@ class AutoProofDataset(Dataset):
             
         return root, input, labels, confidences, dist_to_error, rank, adj, mean_vertices
 
-# def hash_shard(root, num_shards):
-#     hash_value = hash(root)
-#     hash_value = abs(hash_value)
-#     shard_id = hash_value % num_shards
-#     return shard_id
-
 # Always adds in diagonals as self edges/loops
 # Returns a torch tensor
 def edge_list_to_adjency(edges, size, fov):
@@ -169,7 +158,6 @@ def adjency_to_edge_list_numpy_skip_diag(adj):
     edges_upper = edges[mask]
     return edges_upper
 
-# adapted from skeletonize.py
 def prune_edges(edges, indices):
     orig_to_new = {value.item(): index for index, value in enumerate(indices)}
     new_edges = []

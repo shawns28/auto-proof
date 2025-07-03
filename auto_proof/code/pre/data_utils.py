@@ -142,7 +142,6 @@ def get_num_chunk_and_processes(data_config):
 
 def compare_roots(before_path, after_path, diff_path):
     """Compares the roots from before and after and saves the different roots"""
-    # Comparing the roots after the operation to before
     before_op = load_txt(before_path)
     after_op = load_txt(after_path)
     diff = np.setdiff1d(before_op, after_op)

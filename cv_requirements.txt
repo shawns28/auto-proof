@@ -1,9 +1,0 @@
--r requirements.txt
-cloud-volume
-scikit-learn
-networkx
-pyvista[jupyter]
-trame
-trame-vtk
-gcsfs
-prodigyopt

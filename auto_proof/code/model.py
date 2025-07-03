@@ -82,8 +82,7 @@ class MLP(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """ Implements an attention block.
-    """
+    """ Implements an attention block."""
     def __init__(self,
                  dim: int,
                  num_heads: int,
@@ -117,14 +116,9 @@ class GraphTransformer(nn.Module):
                  use_exp: bool = True) -> nn.Module:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
-        self.cls_pos_embedding = nn.Parameter(torch.randn(1, 1, dim))
-
         self.blocks = nn.Sequential(*[
             AttentionBlock(dim=dim, num_heads=num_heads, mlp_ratio=mlp_ratio, use_exp=use_exp)
             for i in range(depth)])
-
-        # self.to_pos_embedding = nn.Linear(pos_dim, dim)
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(dim),
@@ -155,17 +149,8 @@ class GraphTransformer(nn.Module):
         # Compute initial node embedding.
         x = self.to_node_embedding(input)
 
-        # cls_tokens = self.cls_token.repeat(B, 1, 1)
-        # x = torch.cat((cls_tokens, x), dim=1)
-
-        # Add classification token entry to adjanceny matrix. 
-        # adj_cls = torch.zeros(B, N + 1, N + 1, device=input.device)
-        # adj_cls[:, 0, 0] = 1.
-        # adj_cls[:, 1:, 1:] = adj
-        adj_cls = adj
-
         for block in self.blocks:
-            x = block(x, adj_cls)
+            x = block(x, adj)
         x = self.mlp_head(x)
 
         x = self.projector(x)
@@ -196,7 +181,6 @@ class GraphTransformer(nn.Module):
         conf_mask = confidences == 0 # (b * fov - buffer - tolerance)
         losses[conf_mask] *= conf_weight
 
-        # print("losses post confidence", losses)
         return losses.mean()
 
 

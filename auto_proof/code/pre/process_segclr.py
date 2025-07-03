@@ -1,7 +1,6 @@
 from auto_proof.code.pre import data_utils
 from auto_proof.code.pre.roots_at import get_roots_at
 from auto_proof.code.connectomics.reader import EmbeddingReader
-from auto_proof.code.connectomics.sharding import md5_shard
 from auto_proof.code.pre.segclr import get_segclr_emb, sharder, get_roots_at_seglcr_version
 
 import os
@@ -9,17 +8,20 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 import time
-import argparse
 import multiprocessing
 from cloudvolume import CloudVolume
 import glob
-import sys
 import gcsfs
-from scipy.spatial import cKDTree
+import time
 
 def main():
-    """
-        TODO: Fill in
+    """Orchestrates the process of obtaining SEGCLR embeddings for neuron roots.
+
+    Steps involved:
+    1.  Loads configuration settings and roots
+    2.  Removes roots from materialization version 1300, as SEGCLR embeddings are not available for it.
+    3.  Processes a chunk of the filtered list of roots using parallel processing.
+    4.  Saves the updated list of successfully processed roots to a text file.
     """
     data_config = data_utils.get_config('data')
     client_config = data_utils.get_config('client')
@@ -31,48 +33,20 @@ def main():
     roots_dir = f'{data_dir}roots_{mat_version_start}_{mat_version_end}/'
     segclr_dir = f'{data_dir}{data_config['segclr']['segclr_dir']}'
     roots_at_segclr_dir = f'{data_dir}{data_config['segclr']['roots_at_segclr_dir']}'
-    if not os.path.exists(segclr_dir):
-        os.makedirs(segclr_dir)
-    if not os.path.exists(roots_at_segclr_dir):
-        os.makedirs(roots_at_segclr_dir)
-
-    # roots = ['864691135591041291_000'] # proofread at 943
-    # roots = ['864691135463333789_000'] 
-    # roots = ['864691135991989185_000'] # conf error missed
-    # roots = ['864691136952448223_000'] # another one that has maybe close by branch
-    # roots = ['864691134365445988_000'] # not in segclr
-     #roots = ['864691137021374830_000'] # in segclr and between 943-1300
-    # roots = ['864691134541929231_000'] # not in segclr
-    # roots = ['864691134474526022_000'] # not in segclr
-    # roots = ['864691134001592490_000'] # not in segclr
-    # roots = ['864691134940888163_000'] # The index 3154 is out of bounds for axis 0 with size 3154
-    # roots = ['864691134989083258_000'] # Same as above
-    # roots = ['864691135133124000_000'] # eror: Bbox([np.int32(123921), np.int32(58980), np.int32(22466)],[np.int32(124049), np.int32(59108), np.int32(22498)], dtype=np.int32, unit='vx')
     
-    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique.txt")
-    # roots = [str(root) + '_000' for root in roots]
-    # print(len(roots))
+    os.makedirs(segclr_dir, exist_ok=True)
+    os.makedirs(roots_at_segclr_dir, exist_ok=True)
     
-    # TODO: Uncomment
     roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
     print("roots original", len(roots))
 
-    # TODO: Remove after 1300 gets segclr
-    roots_1300_unique_copied = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/1300_unique_copied.txt")
+    # NOTE: This is due to SegCLR not existing for 1300
+    roots_1300_unique_copied = f'{data_dir}{data_config['proofread']['proofread_dir']}1300_unique_copied.txt'
     roots = np.setdiff1d(roots, roots_1300_unique_copied)
     print("roots after removing 1300", len(roots))
 
-    # TODO: Remove when actaully running the script since it can create edge cases
-    already_processed = glob.glob(f'{segclr_dir}*')
-    already_processed = [already_processed[i][-27:-5] for i in range(len(already_processed))]
-    roots = np.setdiff1d(roots, already_processed)
-    # print("roots after removing already existing", len(roots))
-
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
     print("chunk len", len(roots))
-
-    # roots = ['864691137198915137_000', '864691135778235581_000', '864691135463333789_000']
-    # roots = ['864691136020979704_000', '864691136273631245_000']
 
     args_list = list([(root, data_config) for root in roots])
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
@@ -85,11 +59,26 @@ def main():
     data_utils.save_txt(f'{roots_dir}{data_config['segclr']['post_segclr_roots']}', roots)
 
 def process_root(data):
-    """
-        TODO: Fill in
+    """Processes a single neuron root to obtain and save its SegCLR embeddings.
+
+    This function handles the sequential steps for a single neuron root:
+    1.  Determines output file paths for SegCLR embeddings and roots-at data.
+    2.  Skips processing if output files already exist (idempotency).
+    3.  Determines the correct segmentation version for the root, handling
+        cases where SegCLR embeddings are unavailable for specific versions (e.g., 1300).
+    4.  Retrieves the root IDs at the SegCLR version for skeleton vertices from CloudVolume.
+    5.  Initializes an `EmbeddingReader` to fetch SegCLR embeddings.
+    6.  Obtains and processes SegCLR embeddings for the skeleton vertices.
+    7.  Saves the roots-at data, SegCLR embeddings, 
+        and if a node has SegCLR embeddings to HDF5 files.
+
+    Args:
+        data: A tuple containing:
+            - root (str): The unique string identifier for the neuron root.
+            - data_config (Dict[str, Any]): A dictionary of global configuration
+              parameters.
     """
     root, data_config = data
-    # print("root", root)
 
     data_dir = data_config['data_dir']
     segclr_path = f'{data_dir}{data_config['segclr']['segclr_dir']}{root}.hdf5'
@@ -104,8 +93,8 @@ def process_root(data):
     mat_versions = data_config['segclr']['mat_versions']
     segmentation_version = get_roots_at_seglcr_version(root, data_dir, mat_versions, False)
     if segmentation_version == 1300:
-        print("root", root)
-    # print("segmentation version", segmentation_version)
+        print("Got a root at 1300 version. SegCLR embeddings don't exist for 1300 currently.", root)
+        return
     seg_path = data_config['segmentation'][f'precomputed_{segmentation_version}']
     cv_seg = CloudVolume(seg_path, use_https=True)
     resolution = np.array(data_config['segmentation']['resolution'])
@@ -113,15 +102,8 @@ def process_root(data):
     with h5py.File(feature_path, 'r') as f:
         vertices = f['vertices'][:]
         status, e, root_at_arr = get_roots_at(vertices, cv_seg, resolution)
-        # print("root at arr", root_at_arr)
-        # with h5py.File(f'{data_config['data_dir']}{data_config['labels']['roots_at_latest_dir']}{1300}/{root}.hdf5', 'r') as f:
-        #     print(f['roots_at'][:])
         if status == False:
             print("Failed to get roots at for root", root, "eror:", e)
-            root_without_iden = root[:-4]
-            error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_at_segclr_error_roots/{root_without_iden}"
-            with open(error_file_path, 'w') as file:
-                pass
             return
 
     filesystem = gcsfs.GCSFileSystem(token='anon')
@@ -140,10 +122,6 @@ def process_root(data):
         status, e, segclr_emb, has_emb = get_segclr_emb(root, vertices, edges, root_at_arr, embedding_reader, emb_dim, visualize_radius, small_radius, large_radius)
         if status == False:
             print("Failed to segclr for root", root, "eror:", e)
-            root_without_iden = root[:-4]
-            error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_error_roots/{root_without_iden}"
-            with open(error_file_path, 'w') as file:
-                pass
             return
     
     segclr_path = f'{data_dir}{data_config['segclr']['segclr_dir']}{root}.hdf5'
@@ -155,9 +133,10 @@ def process_root(data):
             segclr_f.create_dataset('has_emb', data=has_emb)
     except Exception as e:
         print("Failed to save files for root", root, "error:", e)
-        error_file_path = f"/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/segclr_file_error_roots/{root}"
-        with open(error_file_path, 'w') as file:
-            pass
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    elapsed_time = end_time - start_time # Calculate elapsed time
+    print(f"\nProcess completed in {elapsed_time:.2f} seconds.")

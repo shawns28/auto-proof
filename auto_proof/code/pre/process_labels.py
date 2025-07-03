@@ -8,14 +8,25 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 import time
-import argparse
 import multiprocessing
 from cloudvolume import CloudVolume
 import glob
 
 def main():
-    """
-        TODO: Fill in
+    """Orchestrates the feature labeling and distance calculation pipeline for neuron roots.
+
+    Creates the labels, confidences and distances for each root.
+
+    If labels_type == ignore_inbetween, ignore_edge_ccs should be False.
+    If labels_type == ignore_inbetween_and_edge, ignore_edge_ccs should be True.
+    labels_type == ignore_nothing is deprecated but represented the original labels.
+    
+    Steps involved:
+    1.  Does setup configuration steps.
+    2.  Initializes a multiprocessing pool to process roots in parallel, displaying progress.
+    3.  After all roots in the current chunk are processed, identifies roots for which
+        output files were successfully generated.
+    4.  Saves the updated list of successfully processed roots to a text file.
     """
     data_config = data_utils.get_config('data')
     client_config = data_utils.get_config('client')
@@ -26,30 +37,18 @@ def main():
     mat_version_end = client_config['client']['mat_version_end']
     roots_dir = f'{data_config['data_dir']}roots_{mat_version_start}_{mat_version_end}/'
     latest_version = data_config['labels']['latest_mat_version']
-    # labels_at_latest_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}{latest_version}/'
+    labels_at_latest_dir = f'{data_dir}{data_config['labels']['labels_at_latest_dir']}' \
+                 f'{latest_version}_' \
+                 f'{data_config['labels']['labels_type']}/'
     roots_at_latest_dir = f'{data_dir}{data_config['labels']['roots_at_latest_dir']}{latest_version}/'
-    labels_at_latest_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/labels_at_1300_inbetween/"
-    if not os.path.exists(labels_at_latest_dir):
-        os.makedirs(labels_at_latest_dir)
-    if not os.path.exists(roots_at_latest_dir):
-        os.makedirs(roots_at_latest_dir)
+    os.makedirs(labels_at_latest_dir, exist_ok=True)
+    os.makedirs(roots_at_latest_dir,  exist_ok=True)
 
-    # roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/all_roots.txt")
-    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/proofread/943_unique_copied.txt")
-    # roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/roots_diff_from_curr.txt")
-    # roots = ['864691136926085706_000']
-    # roots = ['864691136619433869_002']
-    # roots = ['864691135777645664_000']
-    # roots = ['864691134295024204_000']
-
-    # roots = ['864691135066482244_000']
-    # roots = ['864691135101228320_000']
+    roots = data_utils.load_txt(f'{roots_dir}{data_config['features']['post_feature_roots']}')
+    
     print("roots len", len(roots))
     roots = data_utils.get_roots_chunk(roots, chunk_num=chunk_num, num_chunks=num_chunks)
     print("chunk len", len(roots))
-
-    # roots = ['864691137198915137_000', '864691135778235581_000', '864691135463333789_000']
 
     args_list = list([(root, data_config) for root in roots])
     with multiprocessing.Pool(processes=num_processes) as pool, tqdm(total=len(roots)) as pbar:
@@ -59,19 +58,35 @@ def main():
     # Save all the roots that were successful
     files = glob.glob(f'{labels_at_latest_dir}*')
     roots = [files[i][-27:-5] for i in range(len(files))]
-    # data_utils.save_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}', roots)
-    data_utils.save_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/post_label_roots_inbetween.txt", roots)
+    data_utils.save_txt(f'{roots_dir}{data_config['labels']['post_label_roots']}', roots)
 
 def process_root(data):
-    """
-        TODO: Fill in
+    """Processes a single neuron root to generate its labels, confidences, and error distances.
+
+    This function handles the sequential steps for a single neuron root:
+    1. Determines output file paths for labels and roots-at data.
+    2. Skips processing if output files already exist (idempotency).
+    3. Retrieves segment IDs (roots-at) for skeleton vertices using CloudVolume,
+       caching results for future runs.
+    4. Computes error labels and associated confidences based on root-at data
+       and known proofread roots.
+    5. Calculates the shortest distance from each vertex to any identified error vertex.
+    6. Saves all generated data into HDF5 files.
+
+    Args:
+        data: A tuple containing:
+            - root (str): The unique string identifier for the neuron root.
+            - data_config (Dict[str, Any]): A dictionary of global configuration
+              parameters.
     """
     root, data_config = data
 
     latest_version = data_config['labels']['latest_mat_version']
-    # labels_at_latest_path = f'{data_config['data_dir']}{data_config['labels']['labels_at_latest_dir']}{latest_version}/{root}.hdf5'
+    labels_at_latest_path = f'{data_config['data_dir']}{data_config['labels']['labels_at_latest_dir']}' \
+                 f'{latest_version}_' \
+                 f'{data_config['labels']['labels_type']}/' \
+                 f'{root}.hdf5'
     roots_at_latest_path = f'{data_config['data_dir']}{data_config['labels']['roots_at_latest_dir']}{latest_version}/{root}.hdf5'
-    labels_at_latest_path = f'/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/labels_at_1300_inbetween/{root}.hdf5'
     # Skip already processed roots
     if os.path.exists(labels_at_latest_path) and os.path.exists(roots_at_latest_path):
         return
@@ -101,12 +116,12 @@ def process_root(data):
     ignore_edge_ccs = data_config['labels']['ignore_edge_ccs']
     with h5py.File(feature_path, 'r') as f:
         edges = f['edges'][:]
-    labels, confidences = create_labels(root, root_at_arr, ignore_edge_ccs, edges, proofread_roots)
+    labels, confidences = create_labels(root_at_arr, ignore_edge_ccs, edges, proofread_roots)
 
     # distance to error
     with h5py.File(feature_path, 'r') as f:
         edges = f['edges'][:]
-        dist = create_dist(root, edges, labels)
+        dist = create_dist(edges, labels)
 
     # Save roots at and labels, confidences, dist
     if not os.path.exists(roots_at_latest_path):
@@ -118,4 +133,8 @@ def process_root(data):
         labels_f.create_dataset('dist', data=dist)
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    elapsed_time = end_time - start_time # Calculate elapsed time
+    print(f"\nProcess completed in {elapsed_time:.2f} seconds.")

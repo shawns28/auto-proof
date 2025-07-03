@@ -18,7 +18,6 @@ from sklearn.metrics import precision_recall_curve
 import json
 from prodigyopt import Prodigy
 
-
 class Trainer(object):
     def __init__(self, config, model, train_dataset, val_dataset, test_dataset, run):
         self.run = run
@@ -75,15 +74,8 @@ class Trainer(object):
         self.epoch = 0
         self.lr = config['optimizer']['lr']
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
-        # Should try the weiss paper schedular and CosineAnnealingLR and CosineAnnealingWarmRestarts
         self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
-        # safeguard_warmup=True
-        # weight_decay = 0.01 # adam default
-        # decouple = False # adam default
-        # d_coef = 0.5
-        # # self.optimizer = Prodigy(list(self.model.parameters()), lr=1.0, weight_decay=weight_decay, decouple=decouple, d_coef=d_coef, safeguard_warmup=safeguard_warmup)
-        # self.optimizer = Prodigy(list(self.model.parameters()), lr=1.0, d_coef=d_coef, safeguard_warmup=safeguard_warmup)
-        # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.epochs)
+        
     def train(self):     
         best_vloss = 1_000_000
         print('Initial Epoch {}/{} | LR {:.4f}'.format(self.epoch, self.epochs, self.optimizer.state_dict()['param_groups'][0]['lr']))
@@ -144,7 +136,6 @@ class Trainer(object):
 
                 output = self.model(input, adj)
                 loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight, rank, self.box_cutoff, self.box_weight)
-                # self.run["train/loss"].append(loss)
 
                 # optimize 
                 loss.backward()
@@ -165,7 +156,6 @@ class Trainer(object):
         
 
     def val_epoch(self):
-        # Thresholds for merge error
         running_vloss = 0
 
         total_output = torch.zeros(1).to(self.device)
@@ -180,7 +170,6 @@ class Trainer(object):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots = data[0]
                 input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data) - 1)]
-                # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 output = self.model(input, adj) # (b, fov, 1)
                 loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
                 self.run["val/loss"].append(loss)
@@ -192,6 +181,7 @@ class Trainer(object):
                 confidences = confidences.squeeze(-1) # (b, fov)
                 dist_to_error = dist_to_error.squeeze(-1) # (b, fov)
 
+                # Used for all node based evaluation
                 mask = labels != -1
                 output_masked = output[mask] # (b * fov - buffer)
                 labels_masked = labels[mask] # (b * fov - buffer)
@@ -202,6 +192,7 @@ class Trainer(object):
                 total_output = torch.cat((total_output, output_masked), dim=0)
                 total_labels = torch.cat((total_labels, labels_masked), dim=0)
 
+                # Used for confident only node based evaluation
                 conf_mask = confidences == True
                 output_conf = output[conf_mask]
                 labels_conf = labels[conf_mask]
@@ -212,15 +203,16 @@ class Trainer(object):
                 total_output_conf = torch.cat((total_output_conf, output_conf), dim=0)
                 total_labels_conf = torch.cat((total_labels_conf, labels_conf), dim=0)
 
+                # Used for object detection (connected component) evaluation
                 output = output.detach().cpu().numpy()
                 mask = mask.detach().cpu().numpy()
-                # roots = roots.detach().cpu().numpy().astype(int)
                 if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
                     for i in range(len(roots)):
                         if roots[i] in self.obj_det_val_roots:
                             root_to_output[roots[i]] = output[i][mask[i]]
 
                 pbar.update()
+        # Object detection (connected component) evaluation
         if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
             print("creating obj det dataset")
             obj_det_data = ObjectDetectionDataset(self.config, root_to_output)
@@ -236,8 +228,8 @@ class Trainer(object):
                 obj_save_path = obj_det_plot(metrics_dict, self.tresholds, self.epoch, self.save_dir, cloud_ratio, self.box_cutoff, self.branch_degrees)
                 self.run[f"plots/obj_precision_recall_curve_{cloud_ratio}"].append(neptune.types.File(obj_save_path))
 
-        # Taking out the initial 0 from initialization
-        # NOTE: Theses plots are no longer useful really
+        # NOTE: Theses plots are not useful other than being a sanity check
+        # Node based evaluation
         total_labels = total_labels.cpu().detach().numpy()[1:]
         total_output = total_output.cpu().detach().numpy()[1:]
         self.pinned_plot(total_labels, total_output, self.recall_targets, 'all')
@@ -248,6 +240,7 @@ class Trainer(object):
         
         return running_vloss / (self.val_size / self.batch_size)
 
+    # TODO: Fill in comments for the below
     def pinned_plot(self, total_labels, total_output, recall_targets, mode):
         precision_curve, recall_curve, threshold_curve = precision_recall_curve(total_labels, total_output)
 
@@ -276,8 +269,6 @@ class Trainer(object):
 
     def find_pinned_recall(self, precision_curve, recall_curve, threshold_curve, target_recall):
         pinned_idx = np.argmin(np.abs(recall_curve - target_recall))
-        # Invert this to be consistent with other visualization
-        # pinned_threshold = 1 - threshold_curve[pinned_idx]
         pinned_threshold = threshold_curve[pinned_idx]
         pinned_precision = precision_curve[pinned_idx]
         pinned_recall = recall_curve[pinned_idx]

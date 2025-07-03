@@ -6,3 +6,12 @@ tqdm
 h5py
 caveclient
 neptune
+jq
+cloud-volume
+scikit-learn
+networkx
+pyvista[jupyter]
+trame
+trame-vtk
+gcsfs
+prodigyopt

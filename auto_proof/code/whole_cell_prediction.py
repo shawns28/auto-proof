@@ -99,11 +99,11 @@ def get_root_dict(root, client_config, data_config, config):
         proofread_roots_path = f'{data_config['data_dir']}{data_config['proofread']['proofread_dir']}{proofread_mat_version1}_{proofread_mat_version2}.txt'
         proofread_roots = data_utils.load_txt(proofread_roots_path)
         ignore_edge_ccs = data_config['labels']['ignore_edge_ccs']
-        labels, confidences = create_labels(root, root_dict['roots_at'], ignore_edge_ccs, root_dict['edges'], proofread_roots)
+        labels, confidences = create_labels(root_dict['roots_at'], ignore_edge_ccs, root_dict['edges'], proofread_roots)
         root_dict['labels'] = labels
         root_dict['confidences'] = confidences
 
-        dist = create_dist(root, root_dict['edges'], root_dict['labels'])
+        dist = create_dist(root_dict['edges'], root_dict['labels'])
         root_dict['dist'] = dist
         
         # root at segclr
