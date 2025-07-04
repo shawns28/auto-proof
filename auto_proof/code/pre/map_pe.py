@@ -1,3 +1,5 @@
+# Core logic from: https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
+
 from auto_proof.code.pre import data_utils
 
 import numpy as np
@@ -12,9 +14,6 @@ def map_pe_wrapper(pos_enc_dim: int, edges: np.ndarray, num_vertices: int) -> Tu
     This is a wrapper function to handle the creation of a NetworkX graph from
     edges and vertices, and then compute the MAP positional encoding. It
     includes error handling for robustness.
-
-    Core logic from:
-    https://github.com/PKU-ML/LaplacianCanonization/blob/master/data/molecules.py#L314
 
     Args:
         pos_enc_dim: The desired dimension of the positional encoding.

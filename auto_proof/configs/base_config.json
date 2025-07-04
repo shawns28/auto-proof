@@ -1,6 +1,6 @@
 {
     "data": {
-        "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/",
+        "data_dir": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/",
         "features_dir": "features/",
         "labels_dir": "labels_at_1300_ignore_inbetween/",
         "segclr_dir": "segclr/",

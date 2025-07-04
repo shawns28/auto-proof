@@ -18,13 +18,6 @@ We used [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/
 1. `conda install pip`
 1. `pip install --upgrade .`
 
-### Config
-
-There are 3 default configs:
-- base_config: Config for training.
-- client_config: Config for client related information including your cave token and materialization versions. 
-- data_config: Config for pre-processing data including paths to data directories.
-
 ### Data
 
 Contact sven.dorkenwald@alleninstitute.org for a copy of the preprocessed features and model checkpoints.
@@ -37,9 +30,28 @@ Mention which part of the data you need
 
 ## Visualization
 
+Visualizations are created using [PyVista](https://pyvista.org/). Reference `auto_proof/code/visualize.py` for further information on how we implement our visualizations. Our visualizations are stored as static html files that can be viewed interactively in a browser.
+
+To run visualization for an example root run `python -m auto_proof.code.visualize`. 
+
 ## Evaluation
 
 ## Whole Cell Prediction
+
+Whole cell prediction will fetch the full skeleton for a given root, create all the features, run inference on overlapping cutouts and finally produce a prediction for the entire root. Reference `auto_proof/code/whole_cell_prediction.py` for implemenation information.
+
+To run whole cell prediction for an example root run `python -m auto_proof.code.whole_cell_prediction`.
+
+## Presentation
+
+The [Google Slides Link](https://docs.google.com/presentation/d/1TfCGLKy_9qY4UNYAZUvIV4orKXNUV_N0i5nORunV6TA/edit?usp=sharing)
+
+`auto_proof/data/figures/presentation` contains the final plots and visualization html files. The presentation should have links to these files in the speaker notes.
+
+`auto_proof/data/ckpt/` contains the model checkpoints.
+AUT-330 is the baseline experiment used for results.
+AUT-331 is trained without SegCLR.
+Due to an update with the object detection logic, the plots in those folders are outdated and the ones in the presentation figures folder should be used instead.
 
 ## Pre-Processing
 
@@ -58,3 +70,12 @@ To start pre-processing you need the initial splitlog of edits which should cont
     1. Run `sbatch auto_proof/code/pre/process_labels.sh`. This will create the roots_at (future roots), labels, confidences and distanes to error for each root. `labels_type` represents the type of labels, 'ignore_inbetween' or 'ignore_inbetween_and_edge'. `ignore_edge_ccs` when true ignores errors at the edge of branches. Estimated time: 3 hours.
     1. Run `sbatch auto_proof/code/pre/process_segclr.sh`. This will create the roots_at for the appropriate SegCLR version and then get the associated SegCLR embedding from Google Cloud and assign the appropriate embeddings to each node in the original cutout. Estimated time: 1.5 days.
 1. Run `sbatch auto_proof/code/pre/train_test_split.sh`. This will split the dataset into train/val/test. It will also generate the evaluation set for each split as well. Estimated time: 30 min.
+
+### Config
+
+TODO: Describe all the important different config keys
+
+There are 3 default configs:
+- base_config: Config for training.
+- client_config: Config for client related information including your cave token and materialization versions. 
+- data_config: Config for pre-processing data including paths to data directories.

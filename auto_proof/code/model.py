@@ -1,9 +1,10 @@
+# Adapted from https://github.com/marissaweis/ssl_neuron/blob/main/ssl_neuron/graphdino.py
+
 import copy
 import torch
 import torch.nn as nn
 from typing import Any
 
-# Adapted from ssl neuron
 class GraphAttention(nn.Module):
     """ Implements GraphAttention.
 
@@ -82,7 +83,8 @@ class MLP(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """ Implements an attention block."""
+    """ Implements an attention block.
+    """
     def __init__(self,
                  dim: int,
                  num_heads: int,
@@ -115,6 +117,11 @@ class GraphTransformer(nn.Module):
                  proj_dim: int = 128,
                  use_exp: bool = True) -> nn.Module:
         super().__init__()
+
+        # NOTE: cls_token/pos_embedding not used anymore 
+        # but keeping for compatibility with previous model state dict
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+        self.cls_pos_embedding = nn.Parameter(torch.randn(1, 1, dim))
 
         self.blocks = nn.Sequential(*[
             AttentionBlock(dim=dim, num_heads=num_heads, mlp_ratio=mlp_ratio, use_exp=use_exp)
@@ -149,8 +156,10 @@ class GraphTransformer(nn.Module):
         # Compute initial node embedding.
         x = self.to_node_embedding(input)
 
+        adj_cls = adj
+
         for block in self.blocks:
-            x = block(x, adj)
+            x = block(x, adj_cls)
         x = self.mlp_head(x)
 
         x = self.projector(x)
@@ -173,8 +182,8 @@ class GraphTransformer(nn.Module):
         rank_mask = rank >= box_cutoff
         losses[rank_mask] *= box_weight
 
-        # Create a tolerance around labeled errors
-        # There might be situations where we ignore spots where there are no errors nearby due to fov cutoff
+        # Create a tolerance around labeled errors. There might be situations 
+        # where we ignore spots where there are no errors nearby due to fov cutoff.
         dist_mask = torch.logical_and(dist_to_error >= 0, dist_to_error <= max_dist)
         losses[dist_mask] *= tolerance_weight
 

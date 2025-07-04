@@ -29,21 +29,30 @@ import networkx as nx
 from cloudvolume import CloudVolume
 import pyvista as pv
 
-# - get the skeleton for a full root
-# - get the features for a full root
-# - get the labels for a full root
-# - get segclr for the full root
-
-# Now we should have the inputs and outputs for the model
-# - get a random 250 node subgraph by picking a random seed node and running bfs for 250
-# - run it through the model and mark the 100 core with the outputs
-# - mark the 100 core as seen
-# - pick another starting point and it can't be in anything in seen and get another 250
-# - do this until all are seen, when conflicts arise in the seen, bias error for now
-
-
 # In production I assume things would change and you would need to care about version of root, labels, segclr
 def get_root_dict(root, client_config, data_config, config):
+    """Retrieves or creates a dictionary of root-level data for a given root ID.
+
+    If the data for the given root ID already exists as an HDF5 file, it is loaded.
+    Otherwise, the data is generated through a series of steps including skeletonization,
+    positional embedding mapping, "roots at" calculations for labels and segclr,
+    label creation, distance calculation, and segclr embedding. The newly created
+    data is then saved as an HDF5 file.
+
+    Args:
+        root: The root ID as a string (e.g., "864691135864976604_000").
+        client_config: Dictionary containing client-specific configuration.
+        data_config: Dictionary containing data-specific configuration.
+        config: Dictionary containing general configuration.
+
+    Returns:
+        A dictionary containing all the processed root-level data.
+        Returns an empty dictionary if there's an error loading an existing HDF5 file.
+
+    Raises:
+        Exception: If any of the data generation steps (skeletonization, map pe,
+            roots at for labels, or segclr embedding) fail.
+    """
     whole_cell_dir = config['whole_cell']['data_dir']
     root_path = f'{whole_cell_dir}{root}.hdf5'
     if os.path.exists(root_path):
@@ -146,6 +155,31 @@ def get_root_dict(root, client_config, data_config, config):
         return root_dict
 
 def get_whole_cell_output(root_dict, config, model, device):
+    """Computes the whole cell output by processing subgraphs around each vertex.
+
+    The function iterates through all vertices in the root dictionary, creating
+    subgraphs based on a specified field of view (fov). For each subgraph, it
+    extracts relevant features, feeds them into the provided model, and aggregates
+    the model's output for each vertex. The outputs are averaged for vertices
+    that appear in multiple subgraphs.
+
+    Args:
+        root_dict: A dictionary containing root-level data, including 'vertices',
+            'edges', 'radius', 'map_pe', 'dist', 'labels', 'confidences',
+            'segclr_emb', and 'has_emb'.
+        config: Dictionary containing general configuration, including 'loader'
+            and 'data' sections.
+        model: The PyTorch model to use for inference.
+        device: The PyTorch device (e.g., 'cuda:0' or 'cpu') to run the model on.
+
+    Returns:
+        A numpy array representing the aggregated output for each vertex in the
+        whole cell.
+
+    Raises:
+        Exception: If the number of vertices is greater than 4000, as it's
+            considered too large for mesh visualization.
+    """
     num_vertices = len(root_dict['vertices'])
     print("num vertices", num_vertices)
     if num_vertices > 4000:
@@ -168,7 +202,6 @@ def get_whole_cell_output(root_dict, config, model, device):
     # features = ['vertices', 'radius', 'map_pe', 'has_emb', 'segclr_emb']
     # labels = ['labels', 'confidences', 'dist']
 
-    # convert to torch from numpy
     # TODO: This is currently only configured for the baseline parameters
     # and in the future should reflect models configs
     vertices = torch.from_numpy(root_dict['vertices'])     
@@ -236,6 +269,18 @@ def get_whole_cell_output(root_dict, config, model, device):
     return final_output.detach().cpu().numpy()
 
 def get_root_mesh(root, client_config):
+    """Retrieves the mesh for a given root ID.
+
+    This function connects to the CloudVolume client and fetches the mesh
+    data for the specified root, converting it into a PyVista TriMesh object.
+
+    Args:
+        root: The root ID as a string (e.g., "864691135864976604_000").
+        client_config: Dictionary containing client-specific configuration.
+
+    Returns:
+        A pyvista.PolyData object representing the mesh of the root.
+    """
     client, _, _, _ = data_utils.create_client(client_config)  
     cv = client.info.segmentation_cloudvolume(progress=False)
     root_without_num = int(root[:-4]) # Removing _000 for mesh retrieval
@@ -251,23 +296,18 @@ if __name__ == "__main__":
     data_config = data_utils.get_config('data')
     config = data_utils.get_config('base')
 
-    # root = "864691134918370314_000" # proofread
-    root = "864691135864976604_000" # good example with confident nodes and big and errors
-    # root = "864691134928303015_000"
-    # root = "864691135785368358_000"
-    root = "864691135594727723_000"
-    root = "864691135385310293_000"
-    root = "864691137196879425_000"
+    root = "864691135864976604_000"
+
     root_dict = get_root_dict(root, client_config, data_config, config)
 
-    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
+    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
     run_id = 'AUT-330' # new baseline
     epoch = 60
     # run_id = 'AUT-334' # 500 fov
     # epoch = 45
     # run_id = 'AUT-335' # 500 fov 100 weight
     # epoch = 45
-    # run_id = 'AUT-330' # ignoring edge errors
+    # run_id = 'AUT-332' # ignoring edge errors
     # epoch = 35
     run_dir = f'{ckpt_dir}{run_id}/'
     with open(f'{run_dir}config.json', 'r') as f:
@@ -286,7 +326,6 @@ if __name__ == "__main__":
     print("getting mesh")
     mesh = get_root_mesh(root, client_config)
 
-    # create a potentially separate visual method very similar to usual
     print("visualizing")
     save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/'
     threshold = 0.05

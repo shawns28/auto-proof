@@ -10,8 +10,12 @@ jq
 cloud-volume
 scikit-learn
 networkx
-pyvista[jupyter]
-trame
-trame-vtk
+pyvista[jupyter]>=0.45.0
+trame==3.8.0
+trame-vtk==2.8.14
+trame-client==3.5.2
+trame-server==3.3.0
+trame-vuetify==2.8.1
+vtk>=9.4.0
 gcsfs
 prodigyopt
