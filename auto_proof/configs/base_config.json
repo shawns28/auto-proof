@@ -33,8 +33,7 @@
         "num_classes": 1,
         "dim": 32,
         "depth": 8,
-        "n_head": 7,
-        "rms_norm": false
+        "n_head": 7
     },
     "trainer": {
         "ckpt_dir": "ckpt/",

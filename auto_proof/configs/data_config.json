@@ -5,7 +5,6 @@
         "num_processes": 32
     },
     "raw_edits": {
-        "logs_dir": "logs/raw_edits/",
         "intermediate_version": 943,
         "raw_df": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/250321/minnie_splitlog_250321.feather",
         "raw_edit": "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/250321/minnie_splitlog_250321.npy",
