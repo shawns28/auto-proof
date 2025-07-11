@@ -13,7 +13,22 @@ import time
 import neptune
 
 class AutoProofDataset(Dataset):
+    """
+    A PyTorch Dataset class for loading root information.
+
+    This dataset handles loading features, labels, and SegCLR
+    features from HDF5 files, applying various normalizations,
+    and preparing the data for training.
+    """
     def __init__(self, config, mode):
+        """
+        Initializes the AutoProofDataset.
+
+        Args:
+            config (dict): A dictionary containing configuration parameters.
+            mode (str): The mode of the dataset, e.g., 'train', 'val', 'test', or 'all'. 
+                        'all' is used for all roots. 
+        """
         self.config = config
         self.data_dir = config['data']['data_dir']
         mat_version_start = config['data']['mat_version_start']
@@ -43,26 +58,83 @@ class AutoProofDataset(Dataset):
         self.segclr_std = torch.from_numpy(np.load(f'{self.split_dir}segclr_std.npy'))
 
     def __len__(self):
+        """
+        Returns the total number of roots in the dataset.
+
+        Returns:
+            int: The number of roots.
+        """
         return len(self.roots)
 
     def get_root_index(self, root):
+        """
+        Returns the index of a given root in the dataset.
+
+        Args:
+            root (str): The root identifier.
+
+        Returns:
+            int: The index of the root.
+        """
         index = np.where(self.roots == root)[0][0]
         return index
     
     def get_random_root(self):
+        """
+        Returns a random root identifier from the dataset.
+
+        Returns:
+            str: A random root identifier.
+        """
         random_index = np.random.randint(0, len(self.roots))
         return self.roots[random_index]
     
     def get_is_proofread(self, root):
+        """
+        Checks if a given root has been proofread.
+
+        Args:
+            root (str): The root identifier.
+
+        Returns:
+            bool: True if the root has been proofread, False otherwise.
+        """
         root_without_ident = root[:-4]
         return root_without_ident in self.proofread_roots        
 
     def get_num_initial_vertices(self, root):
+        """
+        Retrieves the number of initial vertices for a given root.
+
+        Args:
+            root (str): The root identifier.
+
+        Returns:
+            int: The number of initial vertices.
+        """
         data_path = f'{self.features_dir}{root}.hdf5'
         with h5py.File(data_path, 'r') as f:
             return f['num_initial_vertices'][()]
 
     def __getitem__(self, index):
+        """
+        Retrieves a single item from the dataset at the given index.
+
+        Args:
+            index (int): The index of the item to retrieve.
+
+        Returns:
+            tuple: A tuple containing:
+                - root (str): The root identifier.
+                - input (torch.Tensor): The concatenated input features.
+                - labels (torch.Tensor): The ground truth labels.
+                - confidences (torch.Tensor): Confidence scores for labels.
+                - dist_to_error (torch.Tensor): Distance to the nearest error.
+                - rank (torch.Tensor): Rank of each vertex.
+                - adj (torch.Tensor): Adjacency matrix of the graph.
+                - mean_vertices (torch.Tensor): Mean of vertices (used for visualization).
+            Returns None if there's an error loading the data for a root.
+        """
         root = self.roots[index]
         feature_path = f'{self.features_dir}{root}.hdf5'
         labels_path = f'{self.labels_dir}{root}.hdf5'
@@ -128,9 +200,20 @@ class AutoProofDataset(Dataset):
             
         return root, input, labels, confidences, dist_to_error, rank, adj, mean_vertices
 
-# Always adds in diagonals as self edges/loops
-# Returns a torch tensor
 def edge_list_to_adjency(edges, size, fov):
+    """
+    Converts a list of edges to an adjacency matrix.
+
+    Always adds in diagonals as self edges/loops.
+
+    Args:
+        edges (np.ndarray): A 2D numpy array where each row represents an edge (u, v).
+        size (int): The original number of vertices in the graph.
+        fov (int): The field of view, which determines the size of the adjacency matrix.
+
+    Returns:
+        torch.Tensor: An (fov x fov) adjacency matrix as a PyTorch tensor.
+    """
     adj = torch.zeros((fov, fov))
     adj[edges[:, 0], edges[:, 1]] = 1
     adj[edges[:, 1], edges[:, 0]] = 1
@@ -138,8 +221,17 @@ def edge_list_to_adjency(edges, size, fov):
         adj[i, i] = 1
     return adj
 
-# Skips edge pairs for diagonals
 def adjency_to_edge_list_torch_skip_diag(adj):
+    """
+    Converts an adjacency matrix to an edge list, skipping diagonal (self-loop) edges.
+
+    Args:
+        adj (torch.Tensor): An adjacency matrix.
+
+    Returns:
+        torch.Tensor: A 2D PyTorch tensor where each row is an edge (u, v),
+                      with u < v to avoid duplicates for undirected graphs.
+    """
     rows, cols = torch.where(adj != 0)
     edges = torch.stack((rows, cols), dim=1)
 
@@ -148,8 +240,17 @@ def adjency_to_edge_list_torch_skip_diag(adj):
     edges_upper = edges[mask]
     return edges_upper
 
-# Skips edge pairs for diagonals
 def adjency_to_edge_list_numpy_skip_diag(adj):
+    """
+    Converts an adjacency matrix to an edge list using NumPy, skipping diagonal (self-loop) edges.
+
+    Args:
+        adj (np.ndarray): An adjacency matrix.
+
+    Returns:
+        np.ndarray: A 2D NumPy array where each row is an edge (u, v),
+                    with u < v to avoid duplicates for undirected graphs.
+    """
     rows, cols = np.where(adj != 0)
     edges = np.column_stack((rows, cols))
 
@@ -159,6 +260,17 @@ def adjency_to_edge_list_numpy_skip_diag(adj):
     return edges_upper
 
 def prune_edges(edges, indices):
+    """
+    Prunes an edge list to include only edges whose endpoints are within the given indices.
+    Also remaps the original vertex indices to new, contiguous indices based on the `indices` list.
+
+    Args:
+        edges (np.ndarray): A 2D numpy array where each row represents an edge (u, v).
+        indices (torch.Tensor): A 1D tensor of original vertex indices that are to be kept.
+
+    Returns:
+        np.ndarray: A new 2D numpy array of pruned and remapped edges.
+    """
     orig_to_new = {value.item(): index for index, value in enumerate(indices)}
     new_edges = []
     for i in range(len(edges)):
@@ -168,6 +280,18 @@ def prune_edges(edges, indices):
     return np.array(new_edges)
 
 def build_dataloader(config, dataset, mode):
+    """
+    Builds a PyTorch DataLoader for the given dataset.
+
+    Args:
+        config (dict): A dictionary containing configuration parameters for the DataLoader.
+        dataset (torch.utils.data.Dataset): The dataset to load.
+        mode (str): The mode of the dataset, e.g., 'train', 'val', 'test', or 'all'.
+                    'train' and 'all' modes will shuffle the data.
+
+    Returns:
+        torch.utils.data.DataLoader: A configured PyTorch DataLoader.
+    """
     num_workers = config['loader']['num_workers']
     batch_size = config['loader']['batch_size']
     shuffle = False

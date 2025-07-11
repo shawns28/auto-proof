@@ -73,6 +73,7 @@ def get_root_output(model, device, data, root):
 
         # Vertices is always first in the input
         vertices = input[:, :3]
+        # Add back the mean_vertices so that the vertices are back to original cooordinates
         vertices = vertices + mean_vertices
         radius = input[:, 3:4]
         map_pe = input[:, 4:36]
@@ -1129,15 +1130,10 @@ if __name__ == "__main__":
         config = json.load(f)
 
     config['data']["data_dir"] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/"
-    config['data']['all_roots'] = "all_roots.txt"
-    config['data']['train_roots'] = "train_roots.txt"
-    config['data']['val_roots'] = "val_roots.txt"
-    config['data']['test_roots'] = "test_roots.txt"
 
     if run_id == 'AUT-330' or run_id == 'AUT-331':
         config['data']['labels_dir'] = "labels_at_1300_ignore_inbetween/"
 
-    config['loader']['fov'] = 250
     data = AutoProofDataset(config, 'all')
     model = create_model(config)
     ckpt_path = f'{run_dir}model_{epoch}.pt'
@@ -1149,7 +1145,6 @@ if __name__ == "__main__":
 
     max_dist = config['trainer']['max_dist']
     config['trainer']['visualize_cutoff'] = 4000
-    config['trainer']['branch_degrees'] = [3, 4, 5]
     box_cutoff = config['data']['box_cutoff']
 
     # Example root

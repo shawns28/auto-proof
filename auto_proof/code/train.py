@@ -1,7 +1,7 @@
 from auto_proof.code.dataset import build_dataloader
 from auto_proof.code.visualize import visualize, get_root_output
 from auto_proof.code.pre import data_utils
-from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plot
+from auto_proof.code.object_detection import ObjectDetectionDataset, obj_det_dataloader, obj_det_plot_legend
 
 import os
 import torch
@@ -19,7 +19,26 @@ import json
 from prodigyopt import Prodigy
 
 class Trainer(object):
+    """
+    Manages the training, validation, and evaluation lifecycle of the AutoProof model.
+
+    This class handles data loading, model optimization, loss computation,
+    checkpointing, visualization, and metric logging (including object detection
+    and node-based precision-recall curves).
+    """
     def __init__(self, config, model, train_dataset, val_dataset, test_dataset, run):
+        """
+        Initializes the Trainer.
+
+        Args:
+            config (dict): A dictionary containing all configuration parameters
+                           for the trainer, loader, data, and model.
+            model (nn.Module): The model to be trained.
+            train_dataset (torch.utils.data.Dataset): The dataset for training.
+            val_dataset (torch.utils.data.Dataset): The dataset for validation.
+            test_dataset (torch.utils.data.Dataset): The dataset for testing.
+            run (neptune.init_run): The Neptune AI experiment run object for logging.
+        """
         self.run = run
         self.run_id = run["sys/id"].fetch()
 
@@ -76,7 +95,13 @@ class Trainer(object):
         self.optimizer = optim.Adam(list(self.model.parameters()), lr=self.lr)
         self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5, factor=0.1)
         
-    def train(self):     
+    def train(self):
+        """
+        Executes the main training loop.
+
+        This method iterates through epochs, performs training and validation,
+        logs metrics to Neptune, saves checkpoints, and generates visualizations.
+        """     
         best_vloss = 1_000_000
         print('Initial Epoch {}/{} | LR {:.4f}'.format(self.epoch, self.epochs, self.optimizer.state_dict()['param_groups'][0]['lr']))
         start_datetime = datetime.now()
@@ -128,6 +153,15 @@ class Trainer(object):
         self.run["total_time"] = total_time
 
     def train_epoch(self):
+        """
+        Runs a single training epoch.
+
+        Iterates through the training DataLoader, performs forward pass, computes loss,
+        backpropagates, and updates model weights. Logs batch-level losses in early stages.
+
+        Returns:
+            float: The average training loss for the epoch.
+        """
         running_loss = 0
         with tqdm(total=self.train_size / self.batch_size, desc="train") as pbar:
             for i, data in enumerate(self.train_loader):
@@ -156,6 +190,16 @@ class Trainer(object):
         
 
     def val_epoch(self):
+        """
+        Runs a single validation epoch.
+
+        Iterates through the validation DataLoader, performs forward pass, computes loss,
+        and collects data for various metric evaluations (node-based PR curves,
+        object detection metrics). Logs validation losses and plots to Neptune.
+
+        Returns:
+            float: The average validation loss for the epoch.
+        """
         running_vloss = 0
 
         total_output = torch.zeros(1).to(self.device)
@@ -169,7 +213,7 @@ class Trainer(object):
             for i, data in enumerate(self.val_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots = data[0]
-                input, labels, confidences, dist_to_error, rank, adj = [data[i].float().to(self.device) for i in range(1, len(data) - 1)]
+                input, labels, confidences, dist_to_error, rank, adj= [data[i].float().to(self.device) for i in range(1, len(data) - 1)]
                 output = self.model(input, adj) # (b, fov, 1)
                 loss = self.model.compute_loss(output, labels, confidences, dist_to_error, self.max_dist, self.class_weights, self.conf_weight, self.tolerance_weight,  rank, self.box_cutoff, self.box_weight)
                 self.run["val/loss"].append(loss)
@@ -212,6 +256,7 @@ class Trainer(object):
                             root_to_output[roots[i]] = output[i][mask[i]]
 
                 pbar.update()
+
         # Object detection (connected component) evaluation
         if self.epoch <= 5 or self.epoch % self.save_visual_every == 0:
             print("creating obj det dataset")
@@ -225,7 +270,7 @@ class Trainer(object):
             metrics_dict = obj_det_data.__getmetrics__()
 
             for cloud_ratio in self.obj_det_error_cloud_ratios:
-                obj_save_path = obj_det_plot(metrics_dict, self.tresholds, self.epoch, self.save_dir, cloud_ratio, self.box_cutoff, self.branch_degrees)
+                obj_save_path = obj_det_plot_legend(metrics_dict, self.tresholds, self.epoch, self.save_dir, cloud_ratio, self.box_cutoff, self.branch_degrees)
                 self.run[f"plots/obj_precision_recall_curve_{cloud_ratio}"].append(neptune.types.File(obj_save_path))
 
         # NOTE: Theses plots are not useful other than being a sanity check
@@ -240,8 +285,21 @@ class Trainer(object):
         
         return running_vloss / (self.val_size / self.batch_size)
 
-    # TODO: Fill in comments for the below
     def pinned_plot(self, total_labels, total_output, recall_targets, mode):
+        """
+        Generates and logs a precision-recall curve with specific recall targets highlighted.
+
+        This plot shows the trade-off between precision and recall for node-level predictions.
+        Points corresponding to predefined `recall_targets` are marked and their
+        associated precision and threshold are displayed.
+
+        Args:
+            total_labels (np.ndarray): Array of true labels (binary).
+            total_output (np.ndarray): Array of model predicted probabilities.
+            recall_targets (list of float): A list of recall values to pinpoint on the curve.
+            mode (str): A string indicating the plot mode (e.g., 'all' for all nodes, 'confident' for confident nodes).
+        """
+
         precision_curve, recall_curve, threshold_curve = precision_recall_curve(total_labels, total_output)
 
         plt.figure(figsize=(8, 8))
@@ -268,6 +326,18 @@ class Trainer(object):
         self.run[f"plots/node_{mode}_precision_recall_curve"].append(neptune.types.File(save_path))
 
     def find_pinned_recall(self, precision_curve, recall_curve, threshold_curve, target_recall):
+        """
+        Finds the precision, recall, and threshold closest to a target recall value on a PR curve.
+
+        Args:
+            precision_curve (np.ndarray): Array of precision values from `precision_recall_curve`.
+            recall_curve (np.ndarray): Array of recall values from `precision_recall_curve`.
+            threshold_curve (np.ndarray): Array of threshold values from `precision_recall_curve`.
+            target_recall (float): The desired recall value to pinpoint.
+
+        Returns:
+            tuple: A tuple containing (pinned_threshold, pinned_precision, pinned_recall).
+        """
         pinned_idx = np.argmin(np.abs(recall_curve - target_recall))
         pinned_threshold = threshold_curve[pinned_idx]
         pinned_precision = precision_curve[pinned_idx]
@@ -276,12 +346,23 @@ class Trainer(object):
         return pinned_threshold, pinned_precision, pinned_recall
 
     def save_checkpoint(self):
+        """
+        Saves the current state of the model as a checkpoint.
+
+        The checkpoint is named by the current epoch and uploaded to Neptune.
+        """
         model_path = 'model_{}.pt'.format(self.epoch)
         complete_path = f'{self.save_dir}{model_path}'
         torch.save(self.model.state_dict(), complete_path)
         self.run["model_ckpts"].upload(complete_path)
 
     def visualize_examples(self):
+        """
+        Generates and uploads visualizations of model predictions for selected examples.
+
+        Includes a set of constant roots for consistent tracking and a number of random roots.
+        Visualizations are saved as HTML files and uploaded to Neptune.
+        """
         dataset_dict = {'train': self.train_dataset, 'val': self.val_dataset, 'test': self.test_dataset}
 
         visualize_tuples = [
@@ -304,6 +385,19 @@ class Trainer(object):
                 pbar.update()
     
     def visualize_root(self, root, is_constant, mode, dataset_dict):
+        """
+        Generates and uploads a single visualization for a specified root.
+
+        This function calls the `visualize` utility to create an interactive HTML
+        visualization of the neuron skeleton, ground truth labels, and model predictions.
+        The visualization is saved locally and then uploaded to Neptune.
+
+        Args:
+            root (str): The ID of the root to visualize.
+            is_constant (bool): True if the root is from the predefined constant set, False if random.
+            mode (str): The dataset mode ('train', 'val', or 'test') the root belongs to.
+            dataset_dict (dict): A dictionary mapping mode strings to their respective datasets.
+        """
         try:
             dataset = dataset_dict[mode]
             vertices, edges, labels, confidences, output, root_mesh, is_proofread, _, dist_to_error, _, _, _, rank, _ = get_root_output(self.model, self.device, dataset, root)

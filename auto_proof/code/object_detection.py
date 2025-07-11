@@ -16,10 +16,26 @@ import time
 import matplotlib.pyplot as plt
 
 class ObjectDetectionDataset(Dataset):
+    """
+    A PyTorch Dataset for evaluating object detection metrics predictions.
+
+    This dataset takes model outputs and ground truth labels, then calculates
+    precision-recall metrics for object-level error detection, considering
+    connected components (error clouds) and various thresholds.
+    """
+
     def __init__(self, config, root_to_output):
+        """
+        Initializes the ObjectDetectionDataset.
+
+        Args:
+            config (dict): A dictionary containing configuration parameters for
+                           data paths, loader settings, and trainer parameters.
+            root_to_output (dict): A dictionary mapping root IDs (str) to
+                                   their corresponding model output predictions (np.ndarray).
+        """
         self.config = config
 
-        # self.seed_index = config['loader']['seed_index']
         self.fov = config['loader']['fov']
         self.data_dir = config['data']['data_dir']
         self.features_dir = f'{self.data_dir}{config['data']['features_dir']}'
@@ -48,12 +64,46 @@ class ObjectDetectionDataset(Dataset):
             })
 
     def __len__(self):
+        """
+        Returns the total number of roots in the dataset.
+
+        Returns:
+            int: The number of roots.
+        """
         return len(self.roots)
 
     def __getmetrics__(self):
+        """
+        Returns a dictionary of accumulated object detection metrics.
+
+        Returns:
+            dict: A copy of the manager dictionary containing TP, FN, FP counts
+                  for various thresholds and branch degrees.
+        """
         return dict(self.threshold_to_metrics)
 
     def __getitem__(self, index):
+        """
+        Processes a single root's data to compute object detection metrics.
+
+        Loads features and labels for a root, prunes data to FOV, calculates
+        connected components for ground truth errors and model predictions,
+        and updates shared metric counters.
+
+        Note: Only counts roots that have 10 times confident nodes as error nodes
+              and total node count >= 20.
+
+        Args:
+            index (int): The index of the root to process.
+
+        Returns:
+            tuple: A tuple containing:
+                - root (str): The ID of the processed root.
+                - missed_error (bool): True if a ground truth error was missed by the baseline criteria.
+                - found_error (bool): True if a ground truth error was found by the baseline criteria.
+                - ignored (bool): True if the root was ignored due to data conditions (e.g., too few nodes).
+            Returns empty string and False, False, False if an unexpected error occurs.
+        """
         root = self.roots[index]
         output = self.root_to_output[root]
         feature_path = f'{self.features_dir}{root}.hdf5'
@@ -85,6 +135,7 @@ class ObjectDetectionDataset(Dataset):
                 num_confident_in_box_cutoff = np.sum(confidences[box_cutoff_nodes])
                 num_errors = np.sum(labels)
 
+                # Only counts roots that have 10 times confident nodes as error nodes
                 if num_confident_in_box_cutoff < 10 * num_errors:
                     return root, False, False, True
 
@@ -142,9 +193,29 @@ class ObjectDetectionDataset(Dataset):
 
         return '', False, False, False
 
-# If any error locations are isolated with no confident non errors nearby
-# then remove from label cc list and mark them as unconfident so they get ignored in output prediction
 def remove_isolated_errors(graph, label_ccs, confidences):
+    """
+    Identifies and removes isolated error components from the label CCs.
+
+    An error component is considered "isolated" if none of its nodes are
+    adjacent to a 'confident' non-error node. Isolated errors are then
+    marked as unconfident in the `confidences` array and removed from
+    the `label_ccs` list, so they are not considered for TP/FN calculations.
+
+    Args:
+        graph (nx.Graph): The NetworkX graph representing the neuron skeleton.
+        label_ccs (list of sets): A list where each set represents the nodes
+                                  of a connected component of ground truth errors.
+        confidences (np.ndarray): A boolean numpy array indicating which nodes are
+                                 'confident' (True) or 'unconfident' (False).
+
+    Returns:
+        tuple: A tuple containing:
+            - new_label_ccs (list of sets): The updated list of label connected components,
+                                            with isolated ones removed.
+            - confidences (np.ndarray): The updated confidences array, with isolated
+                                        error nodes marked as False.
+    """
     new_label_ccs = []
     for cc in label_ccs:
         is_isolated = True
@@ -163,22 +234,66 @@ def remove_isolated_errors(graph, label_ccs, confidences):
     return new_label_ccs, confidences
 
 def get_label_components(graph, labels, box_cutoff_nodes):
-    # data=False since we don't need other attributes of the nodes after we do this
+    """
+    Identifies connected components (CCs) of ground truth error nodes within the box cutoff.
+
+    Args:
+        graph (nx.Graph): The NetworkX graph representing the neuron skeleton.
+        labels (np.ndarray): A boolean numpy array indicating ground truth error nodes (True).
+        box_cutoff_nodes (np.ndarray): A boolean numpy array indicating nodes within the box cutoff.
+
+    Returns:
+        list of sets: A list where each set contains the nodes forming a
+                      connected component of error nodes.
+    """
     subgraph_nodes = [i for i in range(len(labels)) if (labels[i] == True and box_cutoff_nodes[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
 def get_output_components(graph, output, confidences, box_cutoff_nodes):
-    # NOTE: Trying it withoout the confidences only check
+    """
+    Identifies connected components (CCs) of predicted error nodes.
+
+    These are nodes that are predicted as True, are confident, and are within the box cutoff.
+
+    Args:
+        graph (nx.Graph): The NetworkX graph representing the neuron skeleton.
+        output (np.ndarray): A boolean numpy array representing model predictions (True for error).
+        confidences (np.ndarray): A boolean numpy array indicating confident nodes.
+        box_cutoff_nodes (np.ndarray): A boolean numpy array indicating nodes within the box cutoff.
+
+    Returns:
+        list of sets: A list where each set contains the nodes forming a
+                      connected component of predicted error nodes.
+    """
     subgraph_nodes = [i for i in range(len(confidences)) if ((output[i] == True and confidences[i] == True) and box_cutoff_nodes[i] == True)]
-    # subgraph_nodes = [i for i in range(len(confidences)) if (output[i] == True and box_cutoff_nodes[i] == True)]
     subgraph = graph.subgraph(subgraph_nodes)
     ccs = list(nx.connected_components(subgraph))
     return ccs
 
 # Removes output ccs that have too high of an output ratio and removes nodes that aren't in box cutoff after deciding if the cc should be removed
 def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio):
+    """
+    Filters predicted error connected components based on their "error ratio".
+
+    An output CC is kept if the ratio of its nodes that are true errors (according to `labels`)
+    is greater than or equal to `obj_det_error_cloud_ratio`. CCs that fail this criterion
+    are counted as False Positives (FP) if their ratio is 0, or False Negatives (FN)
+    if their ratio is between 0 and `obj_det_error_cloud_ratio`.
+
+    Args:
+        output_ccs (list of sets): A list of connected components of predicted error nodes.
+        labels (np.ndarray): A boolean numpy array indicating ground truth error nodes.
+        obj_det_error_cloud_ratio (float): The minimum ratio of true error nodes within
+                                            an output CC for it to be considered a valid detection.
+
+    Returns:
+        tuple: A tuple containing:
+            - new_output_ccs (list of sets): The filtered list of valid output connected components.
+            - fp (int): Count of False Positives (output CCs with 0 true error nodes).
+            - fn (int): Count of False Negatives (output CCs with some true error nodes, but ratio too low).
+    """
     fp = 0
     fn = 0
     new_output_ccs = []
@@ -198,6 +313,25 @@ def remove_big_output_ccs(output_ccs, labels, obj_det_error_cloud_ratio):
     return new_output_ccs, fp, fn
 
 def count_shared_and_unshared(list_of_sets1, list_of_sets2):
+    """
+    Compares two lists of sets (connected components) to count shared and unshared components.
+
+    A component from `list_of_sets1` is considered "shared" if it has at least one
+    common element with any component in `list_of_sets2`. Otherwise, it's "unshared".
+
+    This function is typically used to calculate True Positives (shared) and False Negatives (unshared)
+    when `list_of_sets1` represents ground truth components and `list_of_sets2` represents
+    predicted components.
+
+    Args:
+        list_of_sets1 (list of sets): The first list of connected components.
+        list_of_sets2 (list of sets): The second list of connected components to compare against.
+
+    Returns:
+        tuple: A tuple containing:
+            - shared (int): The count of components from `list_of_sets1` that overlap with `list_of_sets2`.
+            - unshared (int): The count of components from `list_of_sets1` that do not overlap with `list_of_sets2`.
+    """
     shared = 0
     unshared = 0
     for curr_set1 in list_of_sets1:
@@ -213,6 +347,20 @@ def count_shared_and_unshared(list_of_sets1, list_of_sets2):
     return shared, unshared
 
 def obj_det_dataloader(config, dataset):
+    """
+    Builds a PyTorch DataLoader specifically for object detection evaluation.
+
+    This DataLoader is configured for evaluation, meaning shuffling is disabled
+    and pin_memory/persistent_workers are typically set to False for CPU-only processing.
+
+    Args:
+        config (dict): A dictionary containing configuration parameters,
+                       specifically 'loader' settings for num_workers and batch_size.
+        dataset (torch.utils.data.Dataset): The dataset to load (e.g., ObjectDetectionDataset).
+
+    Returns:
+        torch.utils.data.DataLoader: A configured PyTorch DataLoader.
+    """
     num_workers = config['loader']['num_workers']
     batch_size = config['loader']['batch_size']
     shuffle = False # Don't need to shuffle since its the same set
@@ -230,11 +378,29 @@ def obj_det_dataloader(config, dataset):
             prefetch_factor=prefetch_factor)
 
 def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cutoff, branch_degrees):
+    """
+    Generates and saves an object detection Precision-Recall (P-R) curve.
+
+    The plot shows Precision vs. Recall for various prediction thresholds.
+
+    Args:
+        metrics_dict (dict): A dictionary containing 'conf_tp', 'conf_fn', and 'conf_fp'
+                             for different threshold and cloud ratio combinations.
+        thresholds (list of float): A list of prediction probability thresholds.
+        epoch (int): The current epoch number, used in the plot title and filename.
+        save_dir (str): The directory where the plot will be saved.
+        cloud_ratio (float): The error cloud ratio used, included in the plot title and filename.
+        box_cutoff (int): The box cutoff value, included in the plot title.
+        branch_degrees (list of int): Not directly used in this plot, but kept for signature consistency
+                                      if needed in future variations.
+
+    Returns:
+        str: The file path where the plot was saved.
+    """
     recalls = []
     precisions = []
     for i in range(len(thresholds)):
         threshold = thresholds[i]
-        # Using label tp instead of output tp for now
         precision, recall = get_precision_and_recall(metrics_dict[f'{threshold}_{cloud_ratio}']['conf_tp'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fn'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fp'])
         precisions.append(precision)
         recalls.append(recall)
@@ -243,7 +409,7 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cut
     plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
     plt.xlabel('Recall', fontsize=20)
     plt.ylabel('Precision', fontsize=20)
-    # plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
+    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     plt.xlim(0, 1)
@@ -252,31 +418,35 @@ def obj_det_plot(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cut
     for i in range(len(thresholds)):
         plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
     
-    # recalls = []
-    # precisions = []
-    # for branch_degree in branch_degrees:
-    #     # print("branch degree", branch_degree)
-    #     # Using label tp instead of output tp for now
-    #     precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
-    #     precisions.append(precision)
-    #     recalls.append(recall)
-    # # print(precisions)
-    # # print(recalls)
-    # for i in range(len(branch_degrees)):
-    #     plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
-
-    # plt.legend()
     plt.grid(True)
     save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}.png'
     plt.savefig(save_path)
     return save_path
 
 def obj_det_plot_legend(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, box_cutoff, branch_degrees):
+    """
+    Generates and saves an object detection Precision-Recall (P-R) curve with a full legend.
+
+    This function is similar to `obj_det_plot` but specifically includes detailed labels
+    for each point in the legend.
+
+    Args:
+        metrics_dict (dict): A dictionary containing 'conf_tp', 'conf_fn', and 'conf_fp'
+                             for different threshold and cloud ratio combinations.
+        thresholds (list of float): A list of prediction probability thresholds.
+        epoch (int): The current epoch number, used in the plot title and filename.
+        save_dir (str): The directory where the plot will be saved.
+        cloud_ratio (float): The error cloud ratio used, included in the plot title and filename.
+        box_cutoff (int): The box cutoff value, included in the plot title.
+        branch_degrees (list of int): The branch degrees to use for metrcis.
+
+    Returns:
+        str: The file path where the plot was saved.
+    """
     recalls = []
     precisions = []
     for i in range(len(thresholds)):
         threshold = thresholds[i]
-        # Using label tp instead of output tp for now
         precision, recall = get_precision_and_recall(metrics_dict[f'{threshold}_{cloud_ratio}']['conf_tp'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fn'], metrics_dict[f'{threshold}_{cloud_ratio}']['conf_fp'])
         precisions.append(precision)
         recalls.append(recall)
@@ -285,7 +455,7 @@ def obj_det_plot_legend(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, 
     plt.plot(recalls, precisions, marker='.', markersize=2, label='Precision-Recall curve')
     plt.xlabel('Recall', fontsize=20)
     plt.ylabel('Precision', fontsize=20)
-    # plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
+    plt.title(f'Object Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}')
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     plt.xlim(0, 1)
@@ -294,22 +464,19 @@ def obj_det_plot_legend(metrics_dict, thresholds, epoch, save_dir, cloud_ratio, 
     for i in range(len(thresholds)):
         plt.scatter(recalls[i], precisions[i], c='red', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Threshold: {thresholds[i]}')  # Mark with a red dot
     
-    # recalls = []
-    # precisions = []
-    # for branch_degree in branch_degrees:
-    #     # print("branch degree", branch_degree)
-    #     # Using label tp instead of output tp for now
-    #     precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
-    #     precisions.append(precision)
-    #     recalls.append(recall)
-    # # print(precisions)
-    # # print(recalls)
-    # for i in range(len(branch_degrees)):
-    #     plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
+    recalls = []
+    precisions = []
+    for branch_degree in branch_degrees:
+        precision, recall = get_precision_and_recall(metrics_dict[branch_degree]['conf_tp'], metrics_dict[branch_degree]['conf_fn'], metrics_dict[branch_degree]['conf_fp'])
+        precisions.append(precision)
+        recalls.append(recall)
+
+    for i in range(len(branch_degrees)):
+        plt.scatter(recalls[i], precisions[i], c='blue', s=30, label=f'Recall: {recalls[i]:.2f}, Precision: {precisions[i]:.2f}, Degree: {branch_degrees[i]}')  # Mark with a red dot
 
     plt.legend()
     plt.grid(True)
-    save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}_ledeng.png'
+    save_path = f'{save_dir}obj_precision_recall_{epoch}_{cloud_ratio}_legend.png'
     plt.savefig(save_path)
     return save_path
 
@@ -329,14 +496,7 @@ def plot_branch_statistics(metrics_dict, branch_degrees, epoch, save_dir, cloud_
     recalls = []
     precisions = []
 
-    # Assuming get_precision_and_recall is defined elsewhere and works correctly
-    # def get_precision_and_recall(tp, fn, fp):
-    #     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    #     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    #     return precision, recall
-
     for branch_degree in branch_degrees:
-        # It's good practice to handle cases where a branch_degree might be missing
         if branch_degree in metrics_dict:
             precision, recall = get_precision_and_recall(
                 metrics_dict[branch_degree]['conf_tp'],
@@ -362,20 +522,32 @@ def plot_branch_statistics(metrics_dict, branch_degrees, epoch, save_dir, cloud_
 
     plt.xlabel('Recall', fontsize=20)
     plt.ylabel('Precision', fontsize=20)
-    # plt.title(f'Branch Precision-Recall Curve with Cloud Ratio: {cloud_ratio} in Box: {box_cutoff} at Epoch: {epoch}', fontsize=16)
+    plt.title(f'Branch Precision-Recall Curve with at Epoch: {epoch}', fontsize=16)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     plt.xlim(0, 1)
     plt.ylim(0, 1)
-    # plt.legend(fontsize=10)
+    plt.legend(fontsize=10)
     plt.grid(True)
     
     save_path = f'{save_dir}branch_precision_recall_{epoch}_{cloud_ratio}.png'
     plt.savefig(save_path)
-    plt.close() # Close the plot to free up memory
+    plt.close()
     return save_path
 
 def get_precision_and_recall(tp, fn, fp):
+    """
+    Calculates precision and recall given true positives, false negatives, and false positives.
+
+    Args:
+        tp (int): Number of true positives.
+        fn (int): Number of false negatives.
+        fp (int): Number of false positives.
+
+    Returns:
+        tuple: A tuple containing (precision, recall).
+               Returns 0.0 for either if the denominator is zero to avoid division by zero errors.
+    """
     precision = 0
     if (tp + fp > 0):
         precision = tp / (tp + fp)
@@ -385,75 +557,38 @@ def get_precision_and_recall(tp, fn, fp):
     return precision, recall
 
 if __name__ == "__main__":
-    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/ckpt/"   
-    run_id = 'AUT-255'
-    run_id = 'AUT-275' # first segclr
-    run_id = 'AUT-301'
-    run_id = 'AUT-322'
+    ckpt_dir = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/ckpt/"   
+
     run_id = 'AUT-330' # baseline
-    run_id = 'AUT-331' # no segclr
+    epoch = 60
+    # run_id = 'AUT-331' # no segclr
+    # epoch = 40
     run_dir = f'{ckpt_dir}{run_id}/'
-    epoch = 40
-    # epoch = 60
+    
     ckpt_path = f'{run_dir}model_{epoch}.pt'
     with open(f'{run_dir}config.json', 'r') as f:
         config = json.load(f)
-    # config = data_utils.get_config('base')
     if run_id == 'AUT-330' or run_id == 'AUT-331':
         config['data']['labels_dir'] = "labels_at_1300_ignore_inbetween/"
     
-    model = create_model(config)
+    config['loader']['num_workers'] = 32
+    config['data']["data_dir"] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/"
 
+    model = create_model(config)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict)
     model.to(device)
-
-    # roots = [864691135463333789]
-    # roots = [864691136379030485]
-    # roots = [864691136443843459]
-    # roots = [864691136443843459, 864691135463333789]
-    # roots = ['864691136041340246_000']
-    # roots = ['864691136521643153_000']
-    # roots = ['864691135463333789_000']
-    # roots = ['864691135439772402_000']
-    # config['loader']['normalize'] = False
-    config['loader']['num_workers'] = 32
-    config['trainer']['obj_det_error_cloud_ratios'] = [0.1, 0.2, 0.3]
-    config['data']['all_roots'] = "all_roots_og.txt"
-    config['data']['train_roots'] = "train_roots_og.txt"
-    config['data']['val_roots'] = "val_roots_og.txt"
-    config['data']['test_roots'] = "test_roots_og.txt"
-
     mode = 'test'
     data = AutoProofDataset(config, mode)
-    # config['loader']['batch_size'] = 32
-    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_379668/val_conf_no_error_in_box_roots.txt"
-    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/shared_conf_no_error_in_box_roots.txt"
-    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/root_ids/sharedval_conf_no_error_in_box_roots.txt"
-    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"
-    # config['data']['obj_det_val_path'] = "/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"
-    # config['trainer']['obj_det_error_cloud_ratio'] = 0.2
-    # config['data']['box_cutoff'] = 100
+
     data_loader = build_dataloader(config, data, mode)
-    # config['trainer']['branch_degrees'] = [3, 4, 5]
 
     model.eval()
     with torch.no_grad():
         root_to_output = {}
 
-        # config['loader']['num_workers'] = 1
-        # roots = ['864691135657412579_000']
-        # for root in roots:
-        #     print("Getting root output")
-        #     # Remember this doesn't pre mask so only use things above fov for testing right now
-        #     vertices, edges, labels, confidences, output, _, _, _, _, _ , _, _ = get_root_output(model, device, data, root)
-        #     output = output.detach().cpu().numpy().squeeze(-1)
-        #     root_to_output[root] = output
-
-        # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/val_conf_no_error_in_box_roots.txt"))
-        # obj_det_roots = set(data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_503534/train_conf_no_error_in_box_roots.txt"))
-        obj_det_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/test_conf_no_error_in_box_roots_og.txt")
+        obj_det_roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/roots_343_1300/split_598963/test_conf_no_error_in_box_roots.txt")
         # num_roots_to_sample = int(len(obj_det_roots) * 0.10)
         # sampled_indices = np.random.choice(len(obj_det_roots), size=num_roots_to_sample, replace=False)
         # obj_det_roots = set(obj_det_roots[sampled_indices])
@@ -462,7 +597,6 @@ if __name__ == "__main__":
             for i, data in enumerate(data_loader):
                 # root (b, 1) input (b, fov, d), labels (b, fov, 1), conf (b, fov, 1), adj (b, fov, fov)
                 roots, input, labels, confidences, dist_to_error, rank, adj, _ = data
-                # TODO: Only send input and adj to device and make everything later numpy to make things faster?
                 input = input.float().to(device)
                 labels = labels.float().to(device)
 
@@ -477,7 +611,6 @@ if __name__ == "__main__":
                 mask = mask.detach().cpu().numpy()
 
                 output = output.detach().cpu().numpy()
-                # roots = roots.detach().cpu().numpy().astype(int)
                 for i in range(len(roots)):
                     if roots[i] in obj_det_roots:
                         root_to_output[roots[i]] = output[i][mask[i]]
@@ -506,15 +639,13 @@ if __name__ == "__main__":
                 
                 pbar.update()
         end_time = time.time()
-        # print("time", end_time - start_time)
-        # print("missed_roots", missed_roots)
-        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/plots_before_pres/'
+
+        save_dir = '/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/data/figures/test/'
         data_utils.save_txt(f"{save_dir}missed.txt", missed_roots)
         data_utils.save_txt(f"{save_dir}found.txt", found_roots)
         data_utils.save_txt(f"{save_dir}other.txt", other_roots)
         data_utils.save_txt(f"{save_dir}ignored.txt", ignored_roots)
         metrics_dict = obj_det_data.__getmetrics__()
-        
         
         # branch model
         cloud_ratio = 0.1

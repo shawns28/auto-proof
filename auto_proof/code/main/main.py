@@ -9,6 +9,18 @@ import argparse
 import torch
 
 def main():
+    """
+    Main function to set up and run the AutoProof model training.
+
+    This function handles:
+    1. Parsing command-line arguments for dynamic configuration.
+    2. Loading the base configuration.
+    3. Initializing Neptune AI for experiment tracking.
+    4. Preparing datasets and data loaders.
+    5. Creating and initializing the model.
+    6. Instantiating and running the Trainer.
+    7. Stopping the Neptune run upon completion.
+    """
     config = data_utils.get_config('base')
     ram_alloc = 16
     parser = argparse.ArgumentParser()
@@ -31,8 +43,8 @@ def main():
     # Create a Neptune run
     run = neptune.init_run(
         project="shawns28/AutoProof", 
-        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJlOTA3ZDNjNS0wNGI5LTQ5OWEtYjRkYi05NmFlMzNjNzBkMGIifQ==", 
-        name="fill in", 
+        api_token="FILL IN", 
+        name="fill in optionally", 
         tags=[f'{ram_alloc}gb', f'{fov}fov', gpu], 
         dependencies="infer",
         monitoring_namespace="monitoring",
@@ -72,5 +84,4 @@ def main():
     run.stop()
 
 if __name__ == "__main__":
-   #  multiprocessing.set_start_method('spawn')  # Force 'spawn' This makes it go incredibly slow
     main()

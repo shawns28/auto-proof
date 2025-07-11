@@ -24,36 +24,52 @@ Contact sven.dorkenwald@alleninstitute.org for a copy of the preprocessed featur
 
 ### Config
 
-There are 3 default configs:
+There are 3 default configs in `auto_proof/configs/`:
 - For training: `base_config.json`, documentation: `base_config.md`
 - For client and mat versions: `client_config.json`, documentation: `client_config.md` 
 - For pre-processing data: `data_config.json`, documentation: `data_config.md`
 
-## Training
+Make sure to set your [cave token](https://tutorial.microns-explorer.org/quickstart_notebooks/00_cave_quickstart.html) in `client_config.json`.
 
-Mention which part of the data you need
+Set the correct paths to these configs in `auto_proof/code/pre/data_utils` which handles loading in the configs in various other files.
 
 ### Neptune
+
+We use [Neptune](https://neptune.ai/) for experiment tracking. It allows you to see real-time logs, cpu/gpu utilization, save the state of specified files, compare experiments and view artificats/plots for each experiment easily. 
+
+Make sure to set your [Neptune api token](https://docs.neptune.ai/api_token/) in `auto_proof/code/main/main.py`.
+
+## Training
+
+Run `auto_proof/code/main/main.py` if already on a gpu or one of the sbatch scripts like `sbatch/auto_proof/code/main/main_gpu64.sh` to start training.
 
 ## Visualization
 
 Visualizations are created using [PyVista](https://pyvista.org/). Reference `auto_proof/code/visualize.py` for further information on how we implement our visualizations. Our visualizations are stored as static html files that can be viewed interactively in a browser.
 
-To run visualization for an example root run `python -m auto_proof.code.visualize`. 
+To run visualization for an example root, run `python -m auto_proof.code.visualize`. 
 
 ## Evaluation
+
+Evaluation is done at the node-level and object-level. These metrics are calculated during the validation epoch in training.
+
+Node-level metrics are effectively deprecated and should only be referenced as a sanity check.
+
+Object-level metrics are calculated by treating errors as connected-components. There are various pre-processing steps done to the valication set to pick roots that are good candidates for this evaluation. More information on this can be found in `auto_proof/code/pre/train_test_split.py` and `auto_proof/code/object_detection.py`.
+
+To run object detection on a set of roots, run `python -m auto_proof.code.object_detection`.
 
 ## Whole Cell Prediction
 
 Whole cell prediction will fetch the full skeleton for a given root, create all the features, run inference on overlapping cutouts and finally produce a prediction for the entire root. Reference `auto_proof/code/whole_cell_prediction.py` for implemenation information.
 
-To run whole cell prediction for an example root run `python -m auto_proof.code.whole_cell_prediction`.
+To run whole cell prediction for an example root, run `python -m auto_proof.code.whole_cell_prediction`.
 
 ## Presentation
 
 The [Google Slides Link](https://docs.google.com/presentation/d/1TfCGLKy_9qY4UNYAZUvIV4orKXNUV_N0i5nORunV6TA/edit?usp=sharing)
 
-`auto_proof/data/figures/presentation` contains the final plots and visualization html files. The presentation should have links to these files in the speaker notes.
+`auto_proof/data/figures/presentation/` contains the final plots and visualization html files. The presentation should have links to these files in the speaker notes.
 
 `auto_proof/data/ckpt/` contains the model checkpoints.
 AUT-330 is the baseline experiment used for results.
