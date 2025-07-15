@@ -64,9 +64,6 @@ def main():
     roots = np.setdiff1d(roots, roots_1300_unique_copied)
     print("final roots len", len(roots))
 
-    # TODO: Remove after testing
-    roots = data_utils.load_txt("/allen/programs/celltypes/workgroups/rnaseqanalysis/shawn.stanley/auto_proof/auto_proof/auto_proof/test_data/roots_343_1300/split_598963/all_roots_og.txt")
-
     split = data_config['split']['split']
     split_dir = f'{roots_dir}{data_config['split']['split_dir']}{len(roots)}/'
     split_dicts_dir = f'{split_dir}dicts/'
