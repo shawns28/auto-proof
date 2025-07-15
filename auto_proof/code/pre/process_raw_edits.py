@@ -168,7 +168,7 @@ def save_pruned_df(client, mat_version_start: int, mat_version_end: int, df: pd.
 
     Args:
         client: The CAVE client object, used to get materialization timestamps.
-        mat_version_start: The starting materialization version (inclusive).
+        mat_version_start: The starting materialization version (exclusive).
         mat_version_end: The ending materialization version (inclusive).
         df: The input Pandas DataFrame with columns including 'date' (timestamps)
             and 'operation_id'.

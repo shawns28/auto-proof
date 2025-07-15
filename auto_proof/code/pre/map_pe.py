@@ -41,15 +41,6 @@ def map_pe_wrapper(pos_enc_dim: int, edges: np.ndarray, num_vertices: int) -> Tu
     except Exception as e:
         # Catch any exception during graph creation or PE computation
         return False, e, None
-    try:
-        g = nx.Graph()
-        g.add_nodes_from(range(num_vertices))
-        g.add_edges_from(edges)
-        map_pe = map_positional_encoding(g, True, True, True, pos_enc_dim)
-        return True, None, map_pe.numpy()
-            
-    except Exception as e:
-        return False, e, None
 
 def map_positional_encoding(g, use_unique_sign=True, use_unique_basis=True, use_eig_val=True, pos_enc_dim=32):
     """Creates Maximal Axis Projection (MAP) Positional Encodings.
